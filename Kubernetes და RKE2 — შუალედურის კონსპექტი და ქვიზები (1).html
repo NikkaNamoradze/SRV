@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kubernetes და RKE2 — შუალედურის კონსპექტი და ქვიზები</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Georgian:wdth,wght@62.5..100,100..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F3F6FB; --surface:#FFFFFF; --ink:#13203B; --ink-2:#4A5878; --rule:#D3DCEA;
+  --blue:#2F63D9; --blue-tint:#E5EDFC; --signal:#E9A900; --signal-ink:#13203B;
+  --good:#18794E; --good-tint:#E2F3E9; --bad:#B4232C; --bad-tint:#FBE6E7; --code-bg:#EAF0F8;
+  --indent:40px;
+  --font:"Noto Sans Georgian","Sylfaen","DejaVu Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1525; --surface:#151E33; --ink:#E5EBF7; --ink-2:#A3B0CC; --rule:#2A3652;
+    --blue:#86A9FF; --blue-tint:#1B2A4D; --signal:#F2C230; --signal-ink:#13203B;
+    --good:#5BD18E; --good-tint:#12301F; --bad:#FF8A8F; --bad-tint:#3A1519; --code-bg:#1B2440;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1525; --surface:#151E33; --ink:#E5EBF7; --ink-2:#A3B0CC; --rule:#2A3652;
+  --blue:#86A9FF; --blue-tint:#1B2A4D; --signal:#F2C230; --signal-ink:#13203B;
+  --good:#5BD18E; --good-tint:#12301F; --bad:#FF8A8F; --bad-tint:#3A1519; --code-bg:#1B2440;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none!important}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 72px);scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.68;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--paper)}
+a{color:var(--blue)}
+img,svg{max-width:100%}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:4px}
+
+/* layout */
+.shell{display:grid;grid-template-columns:minmax(0,1fr)}
+main{padding:0 20px 96px;min-width:0}
+@media (min-width:1000px){
+  .shell{grid-template-columns:250px minmax(0,740px);gap:56px;justify-content:center;padding:0 32px}
+  main{padding:0 0 120px}
+}
+
+/* navigation */
+.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--paper);border-bottom:1px solid var(--rule);overflow-x:auto;-webkit-overflow-scrolling:touch}
+.toc ol{list-style:none;margin:0;padding:10px 16px;display:flex;gap:6px;white-space:nowrap}
+.toc a{display:block;text-decoration:none;color:var(--ink-2);font-size:.88rem;padding:6px 10px;border-radius:6px}
+.toc a:hover{color:var(--ink);background:var(--blue-tint)}
+.toc a.on{color:var(--ink);background:var(--blue-tint);font-weight:600}
+.toc .n{font-stretch:62.5%;font-weight:800;color:var(--blue);margin-right:6px}
+.toc .progress,.toc .toc-title,.toc .group{display:none}
+@media (min-width:1000px){
+  .toc{top:calc(env(safe-area-inset-top,0px) + 0px);align-self:start;max-height:100vh;overflow:auto;border-bottom:0;padding:40px 0 32px}
+  .toc ol{display:block;padding:0}
+  .toc li{margin:1px 0}
+  .toc a{white-space:normal;padding:5px 10px}
+  .toc .toc-title{display:block;font-stretch:62.5%;font-weight:800;font-size:1.35rem;line-height:1.1;margin:0 10px 18px}
+  .toc .group{display:block;font-size:.8rem;color:var(--ink-2);margin:18px 10px 4px}
+  .toc .progress{display:block;margin:22px 10px 0;padding-top:16px;border-top:1px solid var(--rule);font-size:.86rem;color:var(--ink-2)}
+  .toc .progress b{color:var(--ink)}
+  .meter{height:6px;background:var(--rule);border-radius:3px;margin:6px 0 12px;overflow:hidden}
+  .meter span{display:block;height:100%;background:var(--blue);width:0;transition:width .3s}
+}
+@media (prefers-reduced-motion: reduce){.meter span{transition:none}}
+
+/* hero */
+.hero{padding:48px 0 8px}
+.hero h1{font-stretch:62.5%;font-weight:850;font-size:clamp(2.7rem,8vw,4.6rem);line-height:.98;letter-spacing:-.005em;margin:0}
+.hero h1 small{display:block;font-weight:500;font-size:.48em;line-height:1.2;margin-top:.45em;color:var(--ink-2);letter-spacing:0}
+.lead{font-size:1.08rem;max-width:62ch;margin:22px 0 0}
+.exam{margin:30px 0 8px}
+.exam-cap{font-size:.92rem;color:var(--ink-2);margin:0 0 8px}
+.exam-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.exam-bar div{background:var(--surface);border:1px solid var(--rule);border-top:4px solid var(--blue);padding:10px 12px;border-radius:0 0 6px 6px;font-size:.88rem;line-height:1.4}
+.exam-bar div.mc{border-top-color:var(--signal)}
+.exam-bar b{display:block;font-stretch:62.5%;font-weight:800;font-size:1.25rem}
+@media (max-width:560px){.exam-bar{grid-template-columns:1fr 1fr}}
+
+/* type */
+section{padding-top:56px}
+h2{font-stretch:62.5%;font-weight:800;font-size:clamp(1.9rem,4.6vw,2.5rem);line-height:1.05;margin:0 0 18px;display:flex;align-items:baseline;gap:14px}
+h2 .num{color:var(--blue);min-width:1.1em}
+h3{font-size:1.18rem;font-weight:650;margin:34px 0 10px;line-height:1.35}
+p{margin:0 0 14px;max-width:70ch}
+ul,ol{padding-left:1.3em;margin:0 0 16px}
+li{margin:4px 0}
+strong{font-weight:650}
+code{font-family:var(--mono);font-size:.84em;background:var(--code-bg);padding:.1em .38em;border-radius:4px;word-break:break-word}
+pre{background:var(--code-bg);border-left:3px solid var(--blue);border-radius:0 6px 6px 0;padding:14px 16px;overflow-x:auto;margin:0 0 18px;line-height:1.5}
+pre code{background:none;padding:0;font-size:.84rem;word-break:normal;white-space:pre}
+.tbl{overflow-x:auto;margin:6px 0 20px;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.93rem;line-height:1.5}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--rule)}
+th{background:var(--blue-tint);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td:first-child{white-space:nowrap}
+.note{font-size:.94rem;color:var(--ink-2)}
+figure{margin:10px 0 18px}
+.fig-scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:12px}
+.fig-scroll svg{display:block;min-width:620px;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--ink-2);margin-top:8px}
+
+/* diagram */
+.d-box{fill:var(--surface);stroke:var(--ink-2);stroke-width:1.25}
+.d-main{fill:var(--blue-tint);stroke:var(--blue);stroke-width:2}
+.d-frame{fill:none;stroke:var(--ink-2);stroke-width:1.25}
+.d-dash{stroke-dasharray:5 4}
+.d-line{fill:none;stroke:var(--ink-2);stroke-width:1.25}
+.d-name{fill:var(--ink);font-weight:650;font-size:13px}
+.d-txt{fill:var(--ink-2);font-size:11.5px}
+.d-txt-ink{fill:var(--ink);font-size:11.5px}
+.d-arrow{fill:var(--ink-2)}
+
+/* star flag */
+.star{display:inline-block;background:var(--signal);color:var(--signal-ink);font-size:.74rem;font-weight:700;line-height:1;padding:4px 7px 3px;border-radius:4px;vertical-align:.15em;white-space:nowrap}
+
+/* quiz tools */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 0 16px;border-bottom:1px solid var(--rule)}
+.score{font-size:.95rem;flex:1 1 100%}
+.score b{font-stretch:62.5%;font-weight:800;font-size:1.35rem;color:var(--blue)}
+.btn{font:inherit;font-size:.88rem;line-height:1.3;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:999px;padding:8px 14px;cursor:pointer;min-height:38px}
+.btn:hover{border-color:var(--blue)}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
+/* MCQ */
+.qlist{list-style:none;margin:0;padding:0}
+.q{border-bottom:1px solid var(--rule);padding:22px 0}
+.q-head{display:flex;gap:12px;align-items:baseline}
+.q-num{font-stretch:62.5%;font-weight:800;font-size:1.45rem;color:var(--blue);flex:0 0 28px;line-height:1}
+.q-text{font-weight:600;font-size:1.02rem;line-height:1.5}
+.opts{display:grid;grid-template-columns:1fr;gap:8px;margin:14px 0 0 var(--indent)}
+@media (min-width:640px){.opts{grid-template-columns:1fr 1fr}}
+@media (max-width:480px){.opts{margin-left:0}}
+.opt{display:flex;gap:10px;align-items:flex-start;text-align:left;font:inherit;font-size:.94rem;line-height:1.45;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:10px 12px;cursor:pointer;min-height:46px}
+.opt:hover:not([disabled]){border-color:var(--blue)}
+.opt[disabled]{cursor:default}
+.opt .l{font-weight:700;color:var(--ink-2);min-width:1.1em}
+.opt .mark{margin-left:auto;font-weight:700}
+.opt.correct{border-color:var(--good);background:var(--good-tint)}
+.opt.correct .l,.opt.correct .mark{color:var(--good)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-tint)}
+.opt.wrong .l,.opt.wrong .mark{color:var(--bad)}
+.why{margin:12px 0 0 var(--indent);padding:2px 0 2px 12px;border-left:3px solid var(--good);font-size:.94rem;color:var(--ink-2)}
+.why.miss{border-left-color:var(--bad)}
+.why b{color:var(--ink)}
+@media (max-width:480px){.why{margin-left:0}}
+
+/* open questions */
+.group-h{font-stretch:62.5%;font-weight:800;font-size:1.5rem;margin:36px 0 0;padding-bottom:8px;border-bottom:2px solid var(--ink)}
+.oq{border-bottom:1px solid var(--rule);padding:22px 0}
+.oq .en{font-style:italic;color:var(--ink-2);font-size:.92rem;margin:4px 0 0 var(--indent)}
+.oq-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 0 var(--indent)}
+.answer{margin:14px 0 0 var(--indent);background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:14px 16px;font-size:.97rem}
+.answer p:last-child{margin-bottom:0}
+.grade{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:12px 0 0 var(--indent);font-size:.88rem;color:var(--ink-2)}
+.grade .btn{font-size:.84rem;padding:6px 12px;min-height:34px}
+.grade .btn[data-g="2"][aria-pressed="true"]{background:var(--good);border-color:var(--good);color:var(--paper)}
+.grade .btn[data-g="1"][aria-pressed="true"]{background:var(--signal);border-color:var(--signal);color:var(--signal-ink)}
+.grade .btn[data-g="0"][aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:var(--paper)}
+@media (max-width:480px){.oq .en,.oq-tools,.answer,.grade{margin-left:0}}
+
+footer{margin-top:72px;padding-top:20px;border-top:1px solid var(--rule);font-size:.88rem;color:var(--ink-2)}
+footer ul{padding-left:1.1em}
+
+@media print{
+  .toc,.bar,.oq-tools,.grade{display:none!important}
+  .answer,.why{display:block!important}
+  body{background:#fff;color:#000}
+  section{break-inside:auto}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc" aria-label="სარჩევი">
+  <div class="toc-title">Kubernetes და RKE2</div>
+  <ol>
+    <li class="group" aria-hidden="true">კონსპექტი</li>
+    <li><a href="#s1"><span class="n">1</span>საფუძვლები</a></li>
+    <li><a href="#s2"><span class="n">2</span>არქიტექტურა</a></li>
+    <li><a href="#s3"><span class="n">3</span>Workload-ები</a></li>
+    <li><a href="#s4"><span class="n">4</span>Service და Ingress</a></li>
+    <li><a href="#s5"><span class="n">5</span>Secret და Probes</a></li>
+    <li><a href="#s6"><span class="n">6</span>საცავი</a></li>
+    <li><a href="#s7"><span class="n">7</span>Labels და Taints</a></li>
+    <li><a href="#s8"><span class="n">8</span>RKE2 EC2-ზე</a></li>
+    <li><a href="#s9"><span class="n">9</span>kubectl</a></li>
+    <li class="group" aria-hidden="true">ქვიზები</li>
+    <li><a href="#test"><span class="n">10</span>ტესტი, 35 კითხვა</a></li>
+    <li><a href="#open"><span class="n">11</span>ღია კითხვები, 30</a></li>
+  </ol>
+  <div class="progress" aria-live="polite">
+    <div>ტესტი: <b id="p-mcq">0 / 35</b> სწორი</div>
+    <div class="meter"><span id="m-mcq"></span></div>
+    <div>ღია: <b id="p-open">0 / 15</b> ქულა</div>
+    <div class="meter"><span id="m-open"></span></div>
+    <div class="note">პროგრესი ამ ბრაუზერში ინახება.</div>
+  </div>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>Kubernetes და RKE2<small>შუალედურის კონსპექტი და ქვიზები</small></h1>
+  <p class="lead">ხუთი მასალა ერთ გვერდზე: ორი ლექცია Kubernetes-ზე, RKE2-ის გზამკვლევი AWS EC2-ზე, Quiz 2-ის პრაქტიკული დავალება და სანიმუშო თეორიული ქვიზი. <span class="star">★ ქვიზი</span> ნიშნავს, რომ კითხვა სანიმუშო ქვიზიდანაა სიტყვასიტყვით.</p>
+  <div class="exam">
+    <p class="exam-cap">სანიმუშო ქვიზის ფორმატი: 25 კითხვა, 10 ქულა. ღია პასუხი 2–5 წინადადებაა: სრული 0.50, ნაწილობრივი 0.25.</p>
+    <div class="exam-bar">
+      <div><b>A</b>საფუძვლები<br>5 ღია × 0.50</div>
+      <div><b>B</b>არქიტექტურა<br>5 ღია × 0.50</div>
+      <div><b>C</b>ქსელი და RKE2<br>5 ღია × 0.50</div>
+      <div class="mc"><b>D</b>ტესტი A–D<br>10 × 0.25</div>
+    </div>
+  </div>
+  <p class="note">რიგი: წაიკითხე სექციები 1–9, მერე გაიარე ტესტი და ღია კითხვები. ღიაზე ჯერ საკუთარი პასუხი ჩამოაყალიბე, მერე შეადარე ნიმუშს და თავად შეაფასე. ქვიზი ინგლისურადაა, ამიტომ ტერმინები აქაც ინგლისურად რჩება.</p>
+</header>
+
+<section id="s1">
+<h2><span class="num">1</span>Kubernetes-ის საფუძვლები</h2>
+<p><strong>Kubernetes (K8s)</strong> კონტეინერიზებული აპლიკაციების (workload-ების) მართვის პლატფორმაა. ის ორკესტრირებს გამოთვლით რესურსს, ქსელს და საცავს, ამიტომ აპლიკაცია ერთნაირად მუშაობს სხვადასხვა ინფრასტრუქტურაზე. დაწერილია <strong>Go</strong> ენაზე.</p>
+<p><strong>კლასტერი</strong> node-ების ერთობლიობაა, რომლებიც კონტეინერიზებულ აპლიკაციებს უშვებენ და ერთ სისტემად იმართება. Node შეიძლება იყოს ფიზიკური სერვერი ან ვირტუალური მანქანა, cloud-ში ან on-premises. მარტივ კლასტერში ერთი control-plane (master) და რამდენიმე worker node-ია; production-ში control plane რამდენიმე მანქანაზე ეშვება.</p>
+<h3>კონტეინერი და image</h3>
+<ul>
+  <li><strong>კონტეინერი</strong> — აპლიკაცია დამოკიდებულებებით, იზოლირებული, მაგრამ ჰოსტის OS kernel-ს იზიარებს. ამიტომ VM-ზე მსუბუქია.</li>
+  <li><strong>განმეორებადობა</strong> — ყველა დამოკიდებულება შიგნითაა, ამიტომ კონტეინერი ყველგან ერთნაირად იქცევა.</li>
+  <li><strong>Container image</strong> — გასაშვებად მზა პაკეტი: კოდი, runtime, ბიბლიოთეკები, ნაგულისხმევი პარამეტრები.</li>
+  <li><strong>Immutability</strong> — გაშვებულ კონტეინერში კოდს არ ცვლი: ააწყე ახალი image და კონტეინერი თავიდან შექმენი.</li>
+  <li><strong>Container runtime</strong> — კონტეინერებს რეალურად უშვებს: containerd, CRI-O ან CRI-ს სხვა იმპლემენტაცია. RKE2 იყენებს <strong>containerd</strong>-ს; Docker მხოლოდ image-ის ასაწყობ მანქანაზეა საჭირო.</li>
+</ul>
+<div class="tbl"><table>
+  <thead><tr><th></th><th>კონტეინერი</th><th>ვირტუალური მანქანა</th></tr></thead>
+  <tbody>
+    <tr><td>OS kernel</td><td>ჰოსტისას იზიარებს</td><td>საკუთარი სრული OS</td></tr>
+    <tr><td>ზომა და გაშვება</td><td>მსუბუქი, წამებში</td><td>მძიმე, წუთებში</td></tr>
+    <tr><td>პორტაბელურობა</td><td>მაღალი</td><td>შეზღუდული</td></tr>
+  </tbody>
+</table></div>
+<h3>kubectl და kubeconfig</h3>
+<p><strong>kubectl</strong> ბრძანების ხაზის ინსტრუმენტია, რომელიც control plane-ს <strong>Kubernetes API</strong>-ით ესაუბრება. მისით ქმნი, ნახულობ, ცვლი და შლი რესურსებს და აკეთებ troubleshooting-ს.</p>
+<p>კონფიგურაციას (kubeconfig) ნაგულისხმევად ეძებს <code>$HOME/.kube/config</code>-ში; სხვა ფაილს უთითებ <code>KUBECONFIG</code> ცვლადით ან <code>--kubeconfig</code> ფლაგით. RKE2-ში ადმინის kubeconfig არის <code>/etc/rancher/rke2/rke2.yaml</code> — მასში ადმინის credentials-ია, არასდროს აქვეყნებ.</p>
+<h3>Namespace</h3>
+<p><strong>Namespace</strong> კლასტერის ლოგიკური დაყოფაა: რესურსები ჯგუფდება და სისტემურისგან გამოიყოფა. მაგ. <code>demo</code> ან <code>quiz2</code> აპლიკაციისთვის, <code>kube-system</code> სისტემური კომპონენტებისთვის. ბრძანებაში: <code>-n &lt;name&gt;</code>, ყველასთვის — <code>-A</code>.</p>
+</section>
+
+<section id="s2">
+<h2><span class="num">2</span>კლასტერის არქიტექტურა</h2>
+<p><strong>Control Plane</strong> იღებს გადაწყვეტილებებს, <strong>Worker Node</strong>-ები კი Pod-ებს რეალურად უშვებენ. ყველა კომპონენტი ერთმანეთს მხოლოდ <strong>kube-apiserver</strong>-ის გავლით ესაუბრება.</p>
+<figure>
+<div class="fig-scroll">
+<svg viewBox="0 28 760 712" role="img" aria-label="კლასტერის არქიტექტურა: Control Plane და Worker Node-ები, ყველა კავშირი kube-apiserver-ზე გადის">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="d-arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+  <g class="d-line">
+    <path d="M200 100V212" marker-end="url(#ar)"/>
+    <path d="M280 256H456" marker-start="url(#ar)" marker-end="url(#ar)"/>
+    <path d="M368 256V184H456" marker-end="url(#ar)"/>
+    <path d="M368 256V328H456" marker-end="url(#ar)"/>
+    <path d="M160 300V456" marker-start="url(#ar)" marker-end="url(#ar)"/>
+    <path d="M160 396H656V420" marker-end="url(#ar)"/>
+    <path d="M162 528V544" marker-end="url(#ar)"/>
+    <path d="M284 580H300" marker-end="url(#ar)"/>
+    <path d="M422 664V616" marker-end="url(#ar)"/>
+  </g>
+  <rect class="d-box" x="120" y="44" width="160" height="56" rx="8"/>
+  <text class="d-name" x="200" y="68" text-anchor="middle">kubectl</text>
+  <text class="d-txt" x="200" y="84" text-anchor="middle">ადმინის CLI</text>
+  <rect class="d-frame" x="24" y="120" width="712" height="252" rx="10"/>
+  <text class="d-name" x="40" y="144">Control Plane</text>
+  <rect class="d-main" x="40" y="212" width="240" height="88" rx="8"/>
+  <text class="d-name" x="160" y="236" text-anchor="middle">kube-apiserver</text>
+  <text class="d-txt-ink" x="160" y="252" text-anchor="middle">Kubernetes API, front end</text>
+  <text class="d-txt-ink" x="160" y="268" text-anchor="middle">ყველა მოთხოვნა მასზე გადის</text>
+  <text class="d-txt-ink" x="160" y="284" text-anchor="middle">მხოლოდ ის წერს etcd-ში</text>
+  <rect class="d-box" x="456" y="156" width="264" height="56" rx="8"/>
+  <text class="d-name" x="588" y="180" text-anchor="middle">etcd</text>
+  <text class="d-txt" x="588" y="196" text-anchor="middle">კლასტერის მდგომარეობის საცავი</text>
+  <rect class="d-box" x="456" y="228" width="264" height="56" rx="8"/>
+  <text class="d-name" x="588" y="252" text-anchor="middle">kube-scheduler</text>
+  <text class="d-txt" x="588" y="268" text-anchor="middle">ახალ Pod-ს node-ს ურჩევს</text>
+  <rect class="d-box" x="456" y="300" width="264" height="56" rx="8"/>
+  <text class="d-name" x="588" y="324" text-anchor="middle">kube-controller-manager</text>
+  <text class="d-txt" x="588" y="340" text-anchor="middle">control loop-ები: Node, Job…</text>
+  <text class="d-txt" x="408" y="388" text-anchor="middle">kubelet ↔ apiserver: ბრძანებები და სტატუსი</text>
+  <rect class="d-frame" x="24" y="420" width="536" height="212" rx="10"/>
+  <text class="d-name" x="40" y="444">Worker Node 1</text>
+  <rect class="d-box" x="40" y="456" width="244" height="72" rx="8"/>
+  <text class="d-name" x="162" y="480" text-anchor="middle">kubelet</text>
+  <text class="d-txt" x="162" y="496" text-anchor="middle">PodSpec-ით უშვებს Pod-ებს</text>
+  <text class="d-txt" x="162" y="512" text-anchor="middle">ასრულებს probe-ებს</text>
+  <rect class="d-box" x="300" y="456" width="244" height="72" rx="8"/>
+  <text class="d-name" x="422" y="480" text-anchor="middle">kube-proxy</text>
+  <text class="d-txt" x="422" y="496" text-anchor="middle">node-ის ქსელური წესები</text>
+  <text class="d-txt" x="422" y="512" text-anchor="middle">Service → Pod ტრაფიკი</text>
+  <rect class="d-box" x="40" y="544" width="244" height="72" rx="8"/>
+  <text class="d-name" x="162" y="568" text-anchor="middle">container runtime</text>
+  <text class="d-txt" x="162" y="584" text-anchor="middle">containerd: image-ის ჩამოტვირთვა</text>
+  <text class="d-txt" x="162" y="600" text-anchor="middle">და კონტეინერის გაშვება</text>
+  <rect class="d-box" x="300" y="544" width="244" height="72" rx="8"/>
+  <text class="d-name" x="422" y="568" text-anchor="middle">Pods</text>
+  <text class="d-txt" x="422" y="584" text-anchor="middle">1+ კონტეინერი, ერთი IP</text>
+  <text class="d-txt" x="422" y="600" text-anchor="middle">აპლიკაციის workload</text>
+  <rect class="d-frame d-dash" x="576" y="420" width="160" height="212" rx="10"/>
+  <text class="d-name" x="656" y="508" text-anchor="middle">Worker Node 2</text>
+  <text class="d-txt" x="656" y="532" text-anchor="middle">იგივე შემადგენლობა</text>
+  <text class="d-txt" x="656" y="548" text-anchor="middle">kubelet, kube-proxy,</text>
+  <text class="d-txt" x="656" y="564" text-anchor="middle">containerd, Pods</text>
+  <rect class="d-box" x="300" y="664" width="244" height="56" rx="8"/>
+  <text class="d-name" x="422" y="688" text-anchor="middle">მომხმარებლები</text>
+  <text class="d-txt" x="422" y="704" text-anchor="middle">Service / Ingress-ის გავლით</text>
+</svg>
+</div>
+<figcaption>kubectl და kubelet-ები apiserver-ს ესაუბრებიან; etcd-ში მხოლოდ apiserver წერს, მომხმარებლის ტრაფიკი კი Pod-ებამდე Service-ით ან Ingress-ით აღწევს.</figcaption>
+</figure>
+<h3>Control Plane-ის კომპონენტები</h3>
+<div class="tbl"><table>
+  <thead><tr><th>კომპონენტი</th><th>რას აკეთებს</th><th>დასამახსოვრებელი</th></tr></thead>
+  <tbody>
+    <tr><td><strong>kube-apiserver</strong></td><td>ავლენს Kubernetes API-ს; control plane-ის front end</td><td>ჰორიზონტალურად სკალირდება: მეტი ინსტანსი + load balancing</td></tr>
+    <tr><td><strong>etcd</strong></td><td>consistent, highly-available key-value საცავი კლასტერის ყველა მონაცემისთვის</td><td>backup: ჩაშენებული snapshot ან volume snapshot; snapshot დაშიფრე</td></tr>
+    <tr><td><strong>kube-scheduler</strong></td><td>node-ის გარეშე ახლად შექმნილ Pod-ს node-ს ურჩევს</td><td>ითვალისწინებს რესურსებს, policy-ებს, affinity/anti-affinity-ს, data locality-ს, deadlines</td></tr>
+    <tr><td><strong>kube-controller-manager</strong></td><td>controller პროცესებს (control loop-ებს) უშვებს</td><td>ყველა controller ერთ binary-ში, ერთ პროცესადაა</td></tr>
+  </tbody>
+</table></div>
+<ul>
+  <li><strong>Node controller</strong> — node-ის გათიშვას ამჩნევს და რეაგირებს.</li>
+  <li><strong>Job controller</strong> — Job ობიექტებისთვის (ერთჯერადი ამოცანები) ქმნის Pod-ებს და ბოლომდე ასრულებს.</li>
+  <li><strong>Endpoints controller</strong> — ავსებს Endpoints ობიექტს, ანუ Service-ებს Pod-ებთან აკავშირებს.</li>
+  <li><strong>Service Account &amp; Token controllers</strong> — ახალ namespace-ებში ქმნიან ნაგულისხმევ ანგარიშებს და API ტოკენებს.</li>
+</ul>
+<p>Control plane-ის კომპონენტები ნებისმიერ მანქანაზე შეიძლება გაეშვას, მაგრამ setup სკრიპტები მათ ჩვეულებრივ ერთ მანქანაზე უშვებენ და იქ მომხმარებლის კონტეინერებს არ ათავსებენ. Production-ში control plane რამდენიმე მანქანაზეა (HA).</p>
+<h3>Worker Node-ის კომპონენტები</h3>
+<div class="tbl"><table>
+  <thead><tr><th>კომპონენტი</th><th>რას აკეთებს</th></tr></thead>
+  <tbody>
+    <tr><td><strong>kubelet</strong></td><td>აგენტი ყოველ node-ზე: იღებს PodSpec-ებს და ზრუნავს, რომ კონტეინერები გაშვებული და ჯანსაღი იყოს. Kubernetes-ის გარეშე შექმნილ კონტეინერებს არ მართავს.</td></tr>
+    <tr><td><strong>kube-proxy</strong></td><td>ქსელური proxy ყოველ node-ზე, Service-ის კონცეფციის ნაწილი. ინახავს ქსელურ წესებს; იყენებს OS-ის packet filtering-ს, თუ არის, თუ არა — ტრაფიკს თავად აგზავნის.</td></tr>
+    <tr><td><strong>container runtime</strong></td><td>image-ს registry-დან იწერს, ხსნის და აპლიკაციას უშვებს (containerd, CRI-O).</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Node</strong> worker მანქანაა (ვირტუალური ან ფიზიკური), რომელსაც control plane მართავს. ერთ node-ზე ბევრი Pod შეიძლება იყოს; ავტომატური დაგეგმვა თითო node-ის თავისუფალ რესურსს ითვალისწინებს.</p>
+</section>
+
+<section id="s3">
+<h2><span class="num">3</span>Workload ობიექტები</h2>
+<h3>Pod</h3>
+<p><strong>Pod</strong> Kubernetes-ის უმცირესი განლაგებადი (atomic) ერთეულია: ერთი ან მეტი კონტეინერი და მათი საერთო რესურსები — <strong>Volumes</strong> (საცავი), ერთი უნიკალური კლასტერული <strong>IP</strong> და საერთო port space, გაშვების ინფორმაცია (image-ის ვერსია, პორტები).</p>
+<p>Pod აპლიკაციის „ლოგიკური ჰოსტია“: მისი კონტეინერები ყოველთვის ერთ node-ზეა, ერთად იგეგმება და ერთმანეთს <code>localhost</code>-ით ხედავს. node-ის გაფუჭებისას იდენტური Pod-ები სხვა node-ებზე იქმნება.</p>
+<p>Pod-ები <strong>დროებითია</strong>: ახალ Pod-ს ახალი სახელი და IP აქვს. ამიტომ Pod-ს პირდაპირ იშვიათად ქმნიან — ამას Deployment-ს ან StatefulSet-ს ანდობენ.</p>
+<div class="tbl"><table>
+  <thead><tr><th></th><th>Container</th><th>Pod</th></tr></thead>
+  <tbody>
+    <tr><td>რა არის</td><td>ერთი იზოლირებული პროცესი image-იდან</td><td>1+ კონტეინერის „გარსი“</td></tr>
+    <tr><td>ვინ მართავს</td><td>container runtime (containerd)</td><td>Kubernetes (kubelet)</td></tr>
+    <tr><td>IP</td><td>Pod-ისას იყენებს</td><td>ერთი IP ყველა კონტეინერისთვის</td></tr>
+    <tr><td>Kubernetes-ის ერთეული</td><td>არა</td><td>კი, უმცირესი</td></tr>
+  </tbody>
+</table></div>
+<h3>Deployment და ReplicaSet</h3>
+<p><strong>Deployment</strong> Pod-ებისა და ReplicaSet-ების <strong>დეკლარაციულ</strong> განახლებას უზრუნველყოფს: აღწერ სასურველ მდგომარეობას, Deployment controller კი რეალურს მას კონტროლირებადი ტემპით უახლოებს.</p>
+<p><strong>ReplicaSet</strong> უზრუნველყოფს, რომ Pod-ის ზუსტად N ასლი იყოს გაშვებული. იერარქია: <strong>Deployment → ReplicaSet → Pods</strong>. Deployment ყოველი ახალი Pod template-ისთვის ახალ ReplicaSet-ს ქმნის, რაც rolling update-ს და rollback-ს შესაძლებელს ხდის.</p>
+<ul>
+  <li><code>metadata.name</code> — Deployment-ის სახელი (მაგ. <code>nginx-deployment</code>)</li>
+  <li><code>spec.replicas</code> — Pod-ების სასურველი რაოდენობა (მაგ. 3)</li>
+  <li><code>spec.selector.matchLabels</code> — როგორ პოულობს Deployment თავის Pod-ებს</li>
+  <li><code>spec.template.metadata.labels</code> — Pod-ის label-ები; <strong>selector-ს უნდა ემთხვეოდეს</strong></li>
+  <li><code>spec.template.spec.containers</code> — სახელი, image (მაგ. <code>nginx:1.14.2</code>), <code>containerPort</code></li>
+</ul>
+<p><code>kubectl get deployments</code> სვეტები: <strong>READY</strong> (მზა/სასურველი, მაგ. 3/3), <strong>UP-TO-DATE</strong> (უახლეს template-ზე განახლებული), <strong>AVAILABLE</strong> (ხელმისაწვდომი), <strong>AGE</strong>.</p>
+<h3>Scaling და self-healing</h3>
+<ul>
+  <li><strong>Scaling:</strong> <code>kubectl scale deployment nginx --replicas=4 -n demo</code> ცვლის სასურველ რაოდენობას.</li>
+  <li><strong>Self-healing:</strong> Deployment-ის Pod-ს თუ წაშლი, ReplicaSet შეამჩნევს დანაკლისს და <strong>ახალ Pod-ს შექმნის</strong> ახალი სახელით და IP-ით. სამუდამოდ მოსაშორებლად Deployment უნდა წაშალო ან replica-ები შეამცირო.</li>
+  <li><strong>Rollout:</strong> <code>kubectl rollout status deployment/&lt;name&gt;</code> აჩვენებს განახლების მიმდინარეობას.</li>
+</ul>
+<h3>StatefulSet</h3>
+<p><strong>StatefulSet</strong> stateful აპლიკაციებისთვისაა (ბაზები). Pod-ებს <strong>სტაბილური იდენტობა</strong> აქვს: სახელი რიგითი ნომრით (<code>quiz2-stateful-app-0</code>), რომელიც თავიდან შექმნისას იგივე რჩება.</p>
+<ul>
+  <li>თითო Pod-ს საკუთარი <strong>PVC</strong> აქვს <code>volumeClaimTemplates</code>-იდან: <code>&lt;template&gt;-&lt;statefulset&gt;-&lt;ordinal&gt;</code>, მაგ. <code>quiz2-data-quiz2-stateful-app-0</code>.</li>
+  <li>სტაბილური ქსელური სახელისთვის საჭიროა <strong>Headless Service</strong> (<code>clusterIP: None</code>), რომელსაც <code>serviceName</code> ველით მიუთითებ.</li>
+  <li>Pod-ის წაშლისას იგივე სახელის Pod იქმნება და იგივე PVC-ს უერთდება — მონაცემი რჩება.</li>
+</ul>
+<div class="tbl"><table>
+  <thead><tr><th></th><th>Deployment</th><th>StatefulSet</th></tr></thead>
+  <tbody>
+    <tr><td>Pod-ის სახელი</td><td>შემთხვევითი სუფიქსი (<code>nginx-7c5d…</code>)</td><td>რიგითი ნომერი (<code>app-0</code>, <code>app-1</code>)</td></tr>
+    <tr><td>საცავი</td><td>საერთო ან არცერთი</td><td>თითო Pod-ს საკუთარი PVC</td></tr>
+    <tr><td>ქსელური იდენტობა</td><td>არასტაბილური</td><td>სტაბილური, Headless Service-ით</td></tr>
+    <tr><td>გამოყენება</td><td>stateless ვებ აპი (nginx)</td><td>ბაზები, რიგები</td></tr>
+  </tbody>
+</table></div>
+</section>
+
+<section id="s4">
+<h2><span class="num">4</span>ქსელი: Service და Ingress</h2>
+<p>Pod-ები დროებითია და ყოველ ახალ Pod-ს ახალი IP აქვს, ამიტომ „frontend“ Pod-ები „backend“ Pod-ებს IP-ით სანდოდ ვერ მიმართავენ. <strong>Service</strong> Pod-ების ჯგუფს აძლევს <strong>სტაბილურ IP-ს და DNS სახელს</strong> და მათ შორის ტრაფიკს ანაწილებს. Pod-ებს <strong>label selector</strong>-ით პოულობს; მზა Pod-ების მისამართები <strong>Endpoints / EndpointSlices</strong>-ში ინახება.</p>
+<h3>Service-ის ტიპები</h3>
+<div class="tbl"><table>
+  <thead><tr><th>ტიპი</th><th>საიდან ხელმისაწვდომი</th><th>მთავარი თვისება</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ClusterIP</strong> (ნაგულისხმევი)</td><td>მხოლოდ კლასტერის შიგნიდან</td><td>ვირტუალური IP, მარშრუტიზდება მხოლოდ კლასტერის ქსელში</td></tr>
+    <tr><td><strong>NodePort</strong></td><td>გარედან: <code>&lt;NodeIP&gt;:&lt;NodePort&gt;</code></td><td>ყველა node-ზე ხსნის პორტს <strong>30000–32767</strong>-დან (მაგ. 30082); ClusterIP-საც მოიცავს</td></tr>
+    <tr><td><strong>LoadBalancer</strong></td><td>გარედან, cloud LB-ით</td><td>გარე load balancer; AWS-ზე სჭირდება cloud controller ინტეგრაცია</td></tr>
+    <tr><td><strong>ExternalName</strong></td><td>—</td><td>Service-ის სახელს გარე DNS სახელზე მიამართავს (CNAME)</td></tr>
+    <tr><td><strong>Headless</strong> (<code>clusterIP: None</code>)</td><td>კლასტერის შიგნით</td><td>ვირტუალური IP არ აქვს; DNS Pod-ების IP-ებს აბრუნებს. StatefulSet-ისთვის</td></tr>
+  </tbody>
+</table></div>
+<p>პორტები: <strong>port</strong> — Service-ის პორტი; <strong>targetPort</strong> — კონტეინერის პორტი; <strong>nodePort</strong> — node-ის პორტი (NodePort/LoadBalancer).</p>
+<p><code>kubectl expose</code> არსებულ Deployment-ს, ReplicaSet-ს, Pod-ს ან RC-ს ახალ Service-ად აქვეყნებს მისი selector-ით: <code>kubectl expose deployment nginx --type=NodePort --port=80 --target-port=80 -n demo</code>. <code>--type</code>-ის გარეშე იქმნება ClusterIP.</p>
+<h3>Ingress</h3>
+<p><strong>Ingress</strong> API ობიექტია, რომელიც გარედან <strong>HTTP და HTTPS</strong> მარშრუტებს კლასტერის Service-ებამდე მიიყვანს. წესები (rules): host (მაგ. <code>quiz2.example.test</code>) და path (მაგ. <code>/</code>) → backend Service:port.</p>
+<ul>
+  <li>შესაძლებლობები: გარედან ხელმისაწვდომი URL-ები, load balancing, <strong>SSL/TLS termination</strong>, name-based virtual hosting.</li>
+  <li><strong>Ingress Controller</strong> აუცილებელია — ის ასრულებს წესებს. მის გარეშე Ingress არაფერს აკეთებს.</li>
+  <li><code>ingressClassName</code> ირჩევს კონტროლერს; არსებულ კლასებს აჩვენებს <code>kubectl get ingressclass</code>.</li>
+  <li>Ingress <strong>არ</strong> აქვეყნებს ნებისმიერ პორტს ან პროტოკოლს; სხვა პროტოკოლებისთვის NodePort ან LoadBalancer.</li>
+  <li><strong>Default backend</strong> იღებს მოთხოვნებს, რომლებსაც არცერთი წესი არ ემთხვევა.</li>
+</ul>
+<p>მარშრუტი: <strong>client → Ingress-managed load balancer → Ingress → routing rule → Service → Pods</strong>. ლოკალური ტესტისთვის hosts ფაილში: <code>&lt;WORKER_PUBLIC_IP&gt; quiz2.example.test</code>.</p>
+<ul>
+  <li><strong>Edge router</strong> — კლასტერის firewall პოლიტიკას ახორციელებს (cloud gateway ან ფიზიკური მოწყობილობა).</li>
+  <li><strong>Cluster network</strong> — ლოგიკური ან ფიზიკური კავშირები კლასტერის შიგნით კომუნიკაციისთვის.</li>
+</ul>
+<h3>kubectl port-forward</h3>
+<p><code>kubectl port-forward -n demo svc/nginx 8080:80</code> ლოკალურ 8080-ს Service-ის 80-ზე გადაამისამართებს. ნაგულისხმევად მხოლოდ <strong>127.0.0.1</strong>-ზე ისმენს, ამიტომ საჯარო პორტის გახსნა არ სჭირდება. შემოწმება მეორე ტერმინალში: <code>curl http://127.0.0.1:8080</code>.</p>
+</section>
+
+<section id="s5">
+<h2><span class="num">5</span>Secret და Health Probes</h2>
+<h3>Secret</h3>
+<p><strong>Secret</strong> ინახავს პაროლს, ტოკენს, გასაღებს, რომ ისინი Deployment-ის YAML-ში ღიად არ ეწეროს.</p>
+<ul>
+  <li><strong>Opaque</strong> — ზოგადი ტიპი ნებისმიერი key/value წყვილისთვის (<code>APP_USERNAME</code>, <code>APP_PASSWORD</code>).</li>
+  <li>მნიშვნელობები <strong>base64</strong>-ითაა კოდირებული — ეს <strong>დაშიფვრა არ არის</strong>. Secret-ები etcd-ში ინახება; საჭიროა encryption at rest და RBAC.</li>
+  <li>შექმნა: <code>kubectl create secret generic quiz2-web-secret --from-literal=APP_USERNAME=quiz2user --from-literal=APP_PASSWORD=&lt;value&gt; -n quiz2</code></li>
+  <li>გადაცემა: <code>env[].valueFrom.secretKeyRef</code> (ერთი key), <code>envFrom.secretRef</code> (ყველა) ან volume.</li>
+</ul>
+<pre><code>env:
+- name: APP_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: quiz2-web-secret
+      key: APP_PASSWORD</code></pre>
+<p>მითითების ჩვენება პაროლის გარეშე: <code>kubectl describe deployment quiz2-web -n quiz2</code> — Environment-ში ჩანს <code>&lt;set to the key 'APP_PASSWORD' in secret 'quiz2-web-secret'&gt;</code>.</p>
+<h3>სამი Health Probe</h3>
+<p>Probe-ებს <strong>kubelet</strong> ასრულებს: პერიოდულად ამოწმებს კონტეინერს (HTTP GET, TCP ან exec) და შედეგის მიხედვით კონტეინერს ან Service-ის ტრაფიკს მართავს.</p>
+<div class="tbl"><table>
+  <thead><tr><th>Probe</th><th>რას ამოწმებს</th><th>ჩავარდნის შედეგი</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Startup</strong></td><td>ჩაირთო თუ არა აპლიკაცია</td><td>სანამ არ გაივლის, readiness და liveness გამორთულია. <code>failureThreshold × periodSeconds</code> (12 × 5 = 60 წმ) ამოწურვისას kubelet კონტეინერს კლავს და restartPolicy-ით თავიდან უშვებს</td></tr>
+    <tr><td><strong>Readiness</strong></td><td>მზადაა თუ არა ტრაფიკისთვის</td><td>Pod გამოდის Service-ის endpoints-იდან (READY 0/1); <strong>არ</strong> რესტარტდება</td></tr>
+    <tr><td><strong>Liveness</strong></td><td>ცოცხალია თუ არა, ხომ არ „გაიჭედა“</td><td>kubelet კონტეინერს <strong>რესტარტავს</strong>; RESTARTS იზრდება</td></tr>
+  </tbody>
+</table></div>
+<p>პარამეტრები: <code>periodSeconds</code> — სიხშირე; <code>timeoutSeconds</code> — პასუხის ლოდინი; <code>failureThreshold</code> — რამდენი ზედიზედ წარუმატებლობა ითვლება ჩავარდნად.</p>
+<pre><code>startupProbe:
+  httpGet: {path: /, port: 80}
+  periodSeconds: 5
+  failureThreshold: 12
+  timeoutSeconds: 2
+readinessProbe:
+  httpGet: {path: /, port: 80}
+  periodSeconds: 5
+  failureThreshold: 3
+  timeoutSeconds: 2
+livenessProbe:
+  httpGet: {path: /, port: 80}
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 2</code></pre>
+<p><strong>ჩავარდნის ცდა:</strong> liveness path <code>/wrong-health</code>-ზე → nginx 404 → probe ვარდება → ~30 წამში (3 × 10 წმ) კონტეინერი გადაიტვირთება და RESTARTS გაიზრდება. ჩანს <code>kubectl describe pod</code>-ის Events-ში (<code>Liveness probe failed</code>) და <code>kubectl get pods -w</code>-ით.</p>
+</section>
+
+<section id="s6">
+<h2><span class="num">6</span>საცავი: PV, PVC, StorageClass</h2>
+<p>კონტეინერის ფაილური სისტემა დროებითია: Pod-ის წაშლისას მონაცემი ქრება. მუდმივი მონაცემისთვის სამი ობიექტია.</p>
+<div class="tbl"><table>
+  <thead><tr><th>ობიექტი</th><th>რა არის</th><th>Namespace</th></tr></thead>
+  <tbody>
+    <tr><td><strong>PersistentVolume (PV)</strong></td><td>რეალური საცავის ნაწილი (დისკი, local დირექტორია, EBS); ადმინი ქმნის ან ავტომატურად იქმნება</td><td>არა, კლასტერის დონის</td></tr>
+    <tr><td><strong>PersistentVolumeClaim (PVC)</strong></td><td>Pod-ის მოთხოვნა საცავზე: ზომა და access mode</td><td>კი</td></tr>
+    <tr><td><strong>StorageClass</strong></td><td>საცავის კლასი: ვინ ქმნის PV-ს და როდის ხდება მიბმა</td><td>არა</td></tr>
+  </tbody>
+</table></div>
+<p>PVC ეძებს შესაფერის PV-ს და <strong>Bound</strong> ხდება. შემოწმება: <code>kubectl get pv,pvc -n quiz2</code>.</p>
+<ul>
+  <li><strong>Access modes:</strong> <code>ReadWriteOnce</code> (RWO) — read-write ერთ node-ზე; <code>ReadOnlyMany</code>; <code>ReadWriteMany</code>; <code>ReadWriteOncePod</code>.</li>
+  <li><strong>Reclaim policy:</strong> <code>Retain</code> — PVC-ის წაშლის შემდეგ PV და მონაცემი რჩება (Released), ადმინი ხელით ასუფთავებს; <code>Delete</code> — იშლება.</li>
+  <li><code>kubernetes.io/no-provisioner</code> — დინამიკური შექმნა არ ხდება; PV ხელით (სტატიკურად) იქმნება.</li>
+  <li><code>volumeBindingMode: WaitForFirstConsumer</code> — მიბმა ჩერდება, სანამ PVC-ის Pod არ დაიგეგმება; scheduler PV-ის node affinity-ს ითვალისწინებს. local საცავისთვის აუცილებელია.</li>
+</ul>
+<h3>Local PersistentVolume</h3>
+<p>Local PV კონკრეტული node-ის დირექტორიაა (მაგ. <code>/var/lib/quiz2-data</code> quiz2-worker-1-ზე), ამიტომ სჭირდება <strong>nodeAffinity</strong> node-ის <code>kubernetes.io/hostname</code> label-ით.</p>
+<pre><code>nodeAffinity:
+  required:
+    nodeSelectorTerms:
+    - matchExpressions:
+      - key: kubernetes.io/hostname
+        operator: In
+        values: [quiz2-worker-1]</code></pre>
+<p class="note">Local საცავი HA გადაწყვეტა არ არის: node თუ დაიკარგა, მონაცემიც დაიკარგება.</p>
+<h3>მონაცემის შენარჩუნების დემონსტრაცია</h3>
+<ol>
+  <li>StatefulSet <code>volumeClaimTemplates</code>-იდან ქმნის PVC-ს <code>quiz2-data-quiz2-stateful-app-0</code>.</li>
+  <li>PVC უერთდება <code>quiz2-pv</code>-ს; Pod საცავს <code>/data</code>-ზე ამაგრებს.</li>
+  <li>ფაილის ჩაწერა: <code>kubectl exec -n quiz2 quiz2-stateful-app-0 -- sh -c 'echo "Quiz 2 - Persistent Storage Works" &gt; /data/student.txt'</code></li>
+  <li>შლი <strong>მხოლოდ Pod-ს</strong>: <code>kubectl delete pod quiz2-stateful-app-0 -n quiz2</code></li>
+  <li>იგივე სახელის Pod იგივე PVC-ს უერთდება; <code>cat /data/student.txt</code> იგივე ტექსტს აჩვენებს.</li>
+</ol>
+</section>
+
+<section id="s7">
+<h2><span class="num">7</span>სქედულინგი: Labels, Taints, Tolerations</h2>
+<h3>Labels და Selectors</h3>
+<p><strong>Label</strong> key/value წყვილია ობიექტზე (Pod, Node, Service), მაგ. <code>app=quiz2-web</code>. <strong>Selector</strong> label-ებით ირჩევს ობიექტებს: Deployment — თავის Pod-ებს, Service — ტრაფიკის მიმღებ Pod-ებს. selector და label თუ არ ემთხვევა, Service-ს endpoints არ ექნება. ნახვა: <code>kubectl get pods --show-labels</code>.</p>
+<p><strong>Worker role label:</strong> <code>kubectl label node rke2-worker-1 node-role.kubernetes.io/worker=worker</code> — ამის შემდეგ ROLES სვეტში <code>worker</code> ჩანს. ROLES label-ებიდან გამოითვლება, ამიტომ <code>&lt;none&gt;</code> ნორმალურია და გაფუჭებას არ ნიშნავს. label მხოლოდ აღწერითია: დაგეგმვას თავისით არც კრძალავს, არც აიძულებს.</p>
+<h3>Taints და Tolerations</h3>
+<p><strong>Taint</strong> node-ზე ედება და Pod-ებს „აგერიებს“; Pod მხოლოდ შესაბამისი <strong>toleration</strong>-ით დაიგეგმება.</p>
+<div class="tbl"><table>
+  <thead><tr><th>Effect</th><th>რას აკეთებს</th></tr></thead>
+  <tbody>
+    <tr><td><strong>NoSchedule</strong></td><td>ახალ Pod-ებს toleration-ის გარეშე <strong>არ</strong> გეგმავს; გაშვებულებს <strong>არ აგდებს</strong></td></tr>
+    <tr><td><strong>PreferNoSchedule</strong></td><td>ცდილობს არ დაგეგმოს, მაგრამ აუცილებლობისას შეუძლია</td></tr>
+    <tr><td><strong>NoExecute</strong></td><td>ახალს არ გეგმავს და გაშვებულ, toleration-ის არმქონე Pod-ებსაც აგდებს (evict)</td></tr>
+  </tbody>
+</table></div>
+<pre><code>kubectl taint nodes ip-172-31-42-164 node-role.kubernetes.io/control-plane:NoSchedule
+# შემოწმება
+kubectl describe node ip-172-31-42-164 | grep -i Taints
+# მოხსნა: ბოლოში დეფისი
+kubectl taint nodes ip-172-31-42-164 node-role.kubernetes.io/control-plane:NoSchedule-</code></pre>
+<ul>
+  <li>taint node-ის <strong>რეალურ ობიექტურ სახელს</strong> უნდა მიემართოს (<code>kubectl get nodes</code>-იდან, მაგ. <code>ip-172-31-42-164</code>).</li>
+  <li>taint დაადე მას შემდეგ, რაც worker-ები Ready-ა, თორემ ახალი Pod-ები Pending დარჩება.</li>
+  <li>სისტემურ Pod-ებს ხშირად აქვთ toleration-ები, ამიტომ master-ზე მაინც მუშაობენ.</li>
+</ul>
+<div class="tbl"><table>
+  <thead><tr><th></th><th>Label</th><th>Taint</th></tr></thead>
+  <tbody>
+    <tr><td>სად</td><td>ნებისმიერ ობიექტზე</td><td>მხოლოდ Node-ზე</td></tr>
+    <tr><td>დანიშნულება</td><td>იდენტიფიკაცია, დაჯგუფება, არჩევა</td><td>Pod-ების მოგერიება node-იდან</td></tr>
+    <tr><td>დაგეგმვაზე გავლენა</td><td>თავისით არა (nodeSelector/affinity-ით კი)</td><td>კი, toleration-ის გარეშე Pod არ დაიგეგმება</td></tr>
+  </tbody>
+</table></div>
+<p><strong>Node affinity / nodeSelector</strong> პირიქით მუშაობს: Pod-ს label-ებით კონკრეტულ node-ებზე „იზიდავს“, მაგ. local PV-ის <code>kubernetes.io/hostname</code> affinity.</p>
+</section>
+
+<section id="s8">
+<h2><span class="num">8</span>RKE2 AWS EC2-ზე</h2>
+<p><strong>RKE2</strong> Kubernetes-ის დისტრიბუციაა (Rancher): ერთად აყენებს control-plane კომპონენტებს, kubelet-ს, containerd-ს და დაკავშირებულ სერვისებს. ლაბში: 1 Server + 2 Agent, Ubuntu Server 24.04 LTS, ვერსია <code>v1.37.1+rke2r1</code>.</p>
+<div class="tbl"><table>
+  <thead><tr><th></th><th>RKE2 Server</th><th>RKE2 Agent</th></tr></thead>
+  <tbody>
+    <tr><td>როლი</td><td>control plane + etcd</td><td>worker</td></tr>
+    <tr><td>რას უშვებს</td><td>API server, scheduler, controllers, ჩაშენებული etcd</td><td>აპლიკაციის Pod-ები (kubelet + containerd)</td></tr>
+    <tr><td>systemd სერვისი</td><td><code>rke2-server</code></td><td><code>rke2-agent</code></td></tr>
+    <tr><td>კავშირი</td><td>ქმნის კლასტერს და join token-ს</td><td>უერთდება server-ს <strong>TCP 9345</strong>-ით, token-ით</td></tr>
+    <tr><td>Workload</td><td>ჩვეულებრივ Pod-ებსაც იღებს, თუ taint არ ადევს</td><td>ძირითადი Pod-ები აქ ეშვება</td></tr>
+  </tbody>
+</table></div>
+<h3>Security Group-ის პორტები</h3>
+<div class="tbl"><table>
+  <thead><tr><th>პორტი</th><th>პროტოკოლი</th><th>დანიშნულება</th></tr></thead>
+  <tbody>
+    <tr><td>22</td><td>TCP</td><td>SSH — მხოლოდ ადმინის IP/32-დან (ან SSM)</td></tr>
+    <tr><td>9345</td><td>TCP</td><td>worker-ის რეგისტრაცია RKE2 server-ზე</td></tr>
+    <tr><td>6443</td><td>TCP</td><td>Kubernetes API</td></tr>
+    <tr><td>10250</td><td>TCP</td><td>Kubelet API (შიდა ტრაფიკი)</td></tr>
+    <tr><td>8472</td><td>UDP</td><td>Canal VXLAN overlay — მხოლოდ node-ებს შორის, არასდროს საჯაროდ</td></tr>
+    <tr><td>9099</td><td>TCP</td><td>Canal health checks</td></tr>
+    <tr><td>2379–2381</td><td>TCP</td><td>etcd, server node-ებს შორის (განსაკუთრებით HA-ში)</td></tr>
+    <tr><td>30000–32767</td><td>TCP</td><td>NodePort — ღიად მხოლოდ საჭირო პორტი, სანდო IP-ზე</td></tr>
+  </tbody>
+</table></div>
+<p>წყაროდ სჯობს იგივე Security Group მიუთითო, ვიდრე <code>0.0.0.0/0</code>. საჭიროა გამავალი ინტერნეტიც (ან NAT/private mirror) პაკეტებისა და image-ებისთვის.</p>
+<h3>Linux-ის მომზადება (სამივე ჰოსტზე)</h3>
+<div class="tbl"><table>
+  <thead><tr><th>ნაბიჯი</th><th>ბრძანება</th><th>რატომ</th></tr></thead>
+  <tbody>
+    <tr><td>SSH გასაღები</td><td><code>chmod 400 rke2-key.pem</code></td><td>SSH ზედმეტად ღია private key-ს უარყოფს</td></tr>
+    <tr><td>განახლება</td><td><code>sudo apt update &amp;&amp; sudo apt upgrade -y</code></td><td>უსაფრთხოება და თავსებადობა</td></tr>
+    <tr><td>Swap</td><td><code>sudo swapoff -a</code></td><td>მეხსიერების პროგნოზირებადი ქცევა</td></tr>
+    <tr><td>Kernel მოდულები</td><td><code>modprobe overlay</code>, <code>modprobe br_netfilter</code></td><td>overlay — ფენოვანი საცავი; br_netfilter — bridge ტრაფიკის ფილტრაცია</td></tr>
+    <tr><td>sysctl</td><td><code>net.ipv4.ip_forward = 1</code>, <code>net.bridge.bridge-nf-call-iptables = 1</code></td><td>Pod-ების ტრაფიკის მარშრუტიზაცია და ფილტრაცია</td></tr>
+  </tbody>
+</table></div>
+<h3>Server-ის ინსტალაცია (master)</h3>
+<ol>
+  <li><code>curl -fsSL https://get.rke2.io -o install.sh</code> — <code>-f</code> HTTP შეცდომაზე ჩავარდნა, <code>-s</code> ჩუმი, <code>-S</code> შეცდომის ჩვენება, <code>-L</code> redirect, <code>-o</code> ფაილში.</li>
+  <li><code>sudo env INSTALL_RKE2_VERSION='v1.37.1+rke2r1' INSTALL_RKE2_TYPE=server sh install.sh</code></li>
+  <li><code>/etc/rancher/rke2/config.yaml</code>: <code>node-name</code>, <code>node-ip</code> (private IP), <code>tls-san</code> (IP API სერტიფიკატში), <code>cni: canal</code>.</li>
+  <li><code>sudo systemctl enable rke2-server</code> (boot-ზე) და <code>sudo systemctl start rke2-server</code> (ახლა).</li>
+  <li>ლოგები: <code>sudo journalctl -u rke2-server -f</code></li>
+  <li>kubeconfig: <code>/etc/rancher/rke2/rke2.yaml</code> → <code>~/.kube/config</code>, <code>chmod 600</code>; PATH-ში <code>/var/lib/rancher/rke2/bin</code>.</li>
+  <li>Join token: <code>sudo cat /var/lib/rancher/rke2/server/node-token</code> — ძალიან მგრძნობიარეა.</li>
+</ol>
+<h3>Agent-ის ინსტალაცია (worker)</h3>
+<ol>
+  <li>იგივე ინსტალერი, იგივე ვერსია, <code>INSTALL_RKE2_TYPE=agent</code>.</li>
+  <li><code>config.yaml</code>: <code>server: https://&lt;MASTER_PRIVATE_IP&gt;:9345</code>, <code>token</code>, უნიკალური <code>node-name</code> და <code>node-ip</code>; ფაილს <code>chmod 600</code>.</li>
+  <li><code>systemctl enable</code> + <code>start rke2-agent</code>; პრობლემისას <code>journalctl -u rke2-agent -n 50 --no-pager</code>.</li>
+  <li>master-ზე: <code>kubectl get nodes -o wide</code> — სამივე <strong>Ready</strong>.</li>
+  <li>შემდეგ worker role label-ები და master-ის NoSchedule taint (სექცია 7).</li>
+</ol>
+<h3>საკუთარი image</h3>
+<p>Dockerfile: <code>FROM nginx:stable-alpine</code>, <code>COPY index.html /usr/share/nginx/html/index.html</code>, <code>EXPOSE 80</code>. <code>EXPOSE</code> მხოლოდ მეტამონაცემია და ჰოსტის პორტს არ ხსნის. შემდეგ <code>docker build -t USER/rke2-demo:v1 .</code> (წერტილი = მიმდინარე დირექტორია), <code>docker login</code>, <code>docker push</code>; worker-ები image-ს registry-დან იწერენ.</p>
+<h3>Production-ისთვის</h3>
+<ul>
+  <li>ერთი master = <strong>single point of failure</strong>. HA: ჩვეულებრივ 3 RKE2 Server, etcd quorum, სტაბილური API endpoint.</li>
+  <li>etcd snapshot-ების და token-ის უსაფრთხო backup, აღდგენის ტესტი.</li>
+  <li>ვერსიების pin და დაგეგმილი განახლება.</li>
+  <li>EBS volume-ებს სჭირდება CSI driver და IAM; LoadBalancer-ს — AWS cloud controller.</li>
+  <li>Least-privilege IAM, RBAC, NetworkPolicy, TLS, მონიტორინგი, ლოგირება, dev/test/prod გამიჯვნა.</li>
+</ul>
+<p class="note">Local Linux სერვერებზე იგივე პროცესია; Security Group-ის ნაცვლად LAN/DNS მარშრუტიზაცია და ჰოსტის firewall.</p>
+</section>
+
+<section id="s9">
+<h2><span class="num">9</span>kubectl და Troubleshooting</h2>
+<p>ოთხი მთავარი ბრძანება: <strong>get</strong> (სია), <strong>describe</strong> (დეტალები და Events), <strong>logs</strong> (კონტეინერის ლოგები), <strong>exec</strong> (ბრძანება კონტეინერში).</p>
+<div class="tbl"><table>
+  <thead><tr><th>ბრძანება</th><th>რას აკეთებს</th></tr></thead>
+  <tbody>
+    <tr><td><code>kubectl get pods -A</code></td><td>Pod-ები ყველა namespace-ში</td></tr>
+    <tr><td><code>kubectl get pods -n &lt;ns&gt; -o wide</code></td><td>Pod-ები IP-ით და node-ით</td></tr>
+    <tr><td><code>kubectl get nodes</code></td><td>NAME, STATUS, ROLES, AGE, VERSION</td></tr>
+    <tr><td><code>kubectl get ns</code> / <code>kubectl create ns &lt;name&gt;</code></td><td>namespace-ების სია / შექმნა</td></tr>
+    <tr><td><code>kubectl get deployments -n &lt;ns&gt;</code></td><td>Deployment-ები</td></tr>
+    <tr><td><code>kubectl get services -n &lt;ns&gt;</code></td><td>Service-ები</td></tr>
+    <tr><td><code>kubectl get ingress -n &lt;ns&gt;</code></td><td>Ingress-ები</td></tr>
+    <tr><td><code>kubectl get svc,endpoints -n &lt;ns&gt;</code></td><td>Service-ები და მათი backend-ები</td></tr>
+    <tr><td><code>kubectl describe pod &lt;pod&gt; -n &lt;ns&gt;</code></td><td>დეტალები და Events</td></tr>
+    <tr><td><code>kubectl logs &lt;pod&gt; -n &lt;ns&gt;</code></td><td>stdout/stderr</td></tr>
+    <tr><td><code>kubectl exec -it &lt;pod&gt; -n &lt;ns&gt; -- sh</code></td><td>shell კონტეინერში</td></tr>
+    <tr><td><code>kubectl apply -f file.yaml</code></td><td>YAML-იდან შექმნა/განახლება</td></tr>
+    <tr><td><code>kubectl create deployment nginx --image=nginx:stable --replicas=2 -n demo</code></td><td>Deployment-ის შექმნა</td></tr>
+    <tr><td><code>kubectl expose deployment nginx --type=NodePort --port=80 -n demo</code></td><td>Service-ის შექმნა</td></tr>
+    <tr><td><code>kubectl scale deployment nginx --replicas=4 -n demo</code></td><td>scaling</td></tr>
+    <tr><td><code>kubectl rollout status deployment/&lt;name&gt;</code></td><td>rollout-ის სტატუსი</td></tr>
+    <tr><td><code>kubectl delete pod &lt;pod&gt; -n &lt;ns&gt;</code></td><td>Pod-ის წაშლა (self-healing ტესტი)</td></tr>
+    <tr><td><code>kubectl get pods -w</code></td><td>ცვლილებები რეალურ დროში</td></tr>
+    <tr><td><code>kubectl label node &lt;node&gt; key=value</code></td><td>label-ის დამატება</td></tr>
+    <tr><td><code>kubectl taint nodes &lt;node&gt; key:Effect</code></td><td>taint (ბოლოში <code>-</code> — მოხსნა)</td></tr>
+    <tr><td><code>kubectl port-forward svc/&lt;svc&gt; 8080:80 -n &lt;ns&gt;</code></td><td>ლოკალური პორტის გადამისამართება</td></tr>
+    <tr><td><code>kubectl get events -A --sort-by=.lastTimestamp</code></td><td>ბოლო მოვლენები</td></tr>
+  </tbody>
+</table></div>
+<h3>ტიპური პრობლემები</h3>
+<div class="tbl"><table>
+  <thead><tr><th>სიმპტომი</th><th>სად ვეძებთ</th><th>სავარაუდო მიზეზი</th></tr></thead>
+  <tbody>
+    <tr><td>Worker არ უერთდება</td><td><code>journalctl -u rke2-agent</code></td><td>არასწორი master IP, დახურული 9345, token ან config.yaml</td></tr>
+    <tr><td>Node NotReady</td><td><code>describe node</code>, <code>get pods -n kube-system</code></td><td>CNI (Canal), DNS, დახურული UDP 8472</td></tr>
+    <tr><td>Pod Pending</td><td><code>describe pod</code> → Events</td><td>CPU/RAM არ ყოფნის, taint, PVC არ არის Bound</td></tr>
+    <tr><td>ImagePullBackOff</td><td><code>describe pod</code></td><td>არასწორი image, registry auth, ქსელი</td></tr>
+    <tr><td>CrashLoopBackOff</td><td><code>logs</code>, <code>describe</code></td><td>აპლიკაციის შეცდომა ან liveness ჩავარდა</td></tr>
+    <tr><td>Service არ პასუხობს</td><td><code>get svc,endpoints</code>, <code>--show-labels</code></td><td>selector ≠ Pod label, Pod არ არის Ready</td></tr>
+  </tbody>
+</table></div>
+</section>
+
+<section id="test">
+<h2><span class="num">10</span>ტესტი: დახურული კითხვები</h2>
+<p>35 კითხვა, თითოზე ერთი სწორი პასუხი. აირჩიე ვარიანტი — პასუხი და ახსნა მაშინვე გამოჩნდება.</p>
+<div class="bar">
+  <div class="score" aria-live="polite">სწორი: <b id="mcq-score">0</b> / <span id="mcq-answered">0</span> პასუხიდან</div>
+  <button class="btn" type="button" id="mcq-star" aria-pressed="false">მხოლოდ ★ კითხვები</button>
+  <button class="btn" type="button" id="mcq-key" aria-pressed="false">გასაღების ჩვენება</button>
+  <button class="btn" type="button" id="mcq-reset">თავიდან დაწყება</button>
+</div>
+<ol class="qlist" id="mcq"></ol>
+</section>
+
+<section id="open">
+<h2><span class="num">11</span>ღია კითხვები</h2>
+<p>30 კითხვა ნიმუშ-პასუხით. ჯერ საკუთარი პასუხი 2–5 წინადადებით ჩამოაყალიბე, მერე გახსენი ნიმუში და შეაფასე თავი გამოცდის წესით: სრული 0.5, ნაწილობრივი 0.25. სრულ ქულას იღებს პასუხი, რომელშიც განმარტებაც, დანიშნულებაც და მაგალითი ან განსხვავებაა.</p>
+<div class="bar">
+  <div class="score" aria-live="polite">თვითშეფასება: <b id="open-score">0</b> / <span id="open-max">15</span> ქულა</div>
+  <button class="btn" type="button" id="open-star" aria-pressed="false">მხოლოდ ★ კითხვები</button>
+  <button class="btn" type="button" id="open-all" aria-pressed="false">ყველა პასუხის ჩვენება</button>
+  <button class="btn" type="button" id="open-reset">შეფასების გასუფთავება</button>
+</div>
+<div id="oq"></div>
+</section>
+
+<footer>
+  <p>წყარო: ატვირთული მასალები — „Kubernetes Architecture“ და „Kubernetes Documentation“ ლექციები, RKE2 / AWS EC2 Hands-on Guide (2026 წლის 10 ოქტომბრის რევიზია), Quiz 2 Practical Examination და სანიმუშო Theoretical Quiz.</p>
+</footer>
+</main>
+</div>
+<script>
+const MCQ = [
+ {s:1,q:"რომელი კომპონენტი ანაწილებს (schedule) Pod-ებს Node-ებზე?",o:["Kubelet","kube-scheduler","etcd","kube-proxy"],a:1,w:"kube-scheduler ახალ, node-ის გარეშე Pod-ებს node-ს უნიშნავს."},
+ {s:1,q:"რომელი ბრძანება აჩვენებს კლასტერის ყველა Node-ს?",o:["`kubectl get pods`","`kubectl get services`","`kubectl get nodes`","`kubectl get deployments`"],a:2,w:"`get nodes` აჩვენებს სახელს, სტატუსს, როლს, ასაკს და ვერსიას."},
+ {s:1,q:"რა არის Kubernetes-ის უმცირესი განლაგებადი ერთეული?",o:["Container image","Node","Cluster","Pod"],a:3,w:"Pod ატომური ერთეულია; კონტეინერს პირდაპირ არ ვქმნით."},
+ {s:1,q:"რომელი კომპონენტი ინახავს კლასტერის მდგომარეობას?",o:["etcd","Kubelet","CoreDNS","containerd"],a:0,w:"etcd არის key-value საცავი კლასტერის ყველა მონაცემისთვის."},
+ {s:1,q:"რას მართავს Kubernetes Deployment?",o:["EC2 ინსტანსების შექმნას","Pod-ების replica-ებს და განახლებებს","VPC routing table-ებს","SSH key pair-ებს"],a:1,w:"Deployment დეკლარაციულად მართავს replica-ებს და rolling update-ს."},
+ {s:1,q:"რა არის Service-ის მთავარი დანიშნულება?",o:["RKE2-ის დაყენება","image-ების აწყობა","Pod-ების ჯგუფზე სტაბილური წვდომა","EC2 მეხსიერების გამოყოფა"],a:2,w:"Service ცვალებად Pod-ებს სტაბილურ IP-ს და DNS სახელს აძლევს და ტრაფიკს ანაწილებს."},
+ {s:1,q:"Service-ის რომელი ტიპია ნაგულისხმევად ხელმისაწვდომი მხოლოდ კლასტერის შიგნიდან?",o:["NodePort","LoadBalancer","ExternalName","ClusterIP"],a:3,w:"ClusterIP ნაგულისხმევი ტიპია და მარშრუტიზდება მხოლოდ კლასტერში."},
+ {s:1,q:"რომელი ბრძანება ზრდის `nginx` Deployment-ს ოთხ replica-მდე?",o:["`kubectl scale deployment nginx --replicas=4`","`kubectl create deployment nginx --replicas=4`","`kubectl get deployment nginx --replicas=4`","`kubectl label deployment nginx replicas=4`"],a:0,w:"`scale` ცვლის სასურველ რაოდენობას; `create` ახალ ობიექტს ქმნის."},
+ {s:1,q:"რას ნიშნავს taint-ის effect `NoSchedule`?",o:["ყველა არსებული Pod იშლება","Pod-ები შესაბამისი toleration-ის გარეშე ამ node-ზე ახლად ვერ დაიგეგმება","Node ითიშება","API Server მთელ კლასტერში წყვეტს დაგეგმვას"],a:1,w:"NoSchedule არსებულ Pod-ებს არ აგდებს — ამას NoExecute აკეთებს."},
+ {s:1,q:"რატომ შეიძლება Worker Node-ს ROLES სვეტში `<none>` ეწეროს?",o:["Node გაფუჭდა","Node-ს Pod-ების გაშვება არ შეუძლია","container runtime აკლია","ცნობილი role label არ აქვს მინიჭებული"],a:3,w:"ROLES label-ებიდან გამოითვლება; `<none>` გაფუჭებას არ ნიშნავს."},
+ {s:0,q:"რომელი კომპონენტი ავლენს Kubernetes API-ს და არის control plane-ის „წინა კარი“?",o:["etcd","kubelet","kube-controller-manager","kube-apiserver"],a:3,w:"kube-apiserver control plane-ის front end-ია."},
+ {s:0,q:"რომელი აგენტი ეშვება ყოველ node-ზე და ამოწმებს, რომ PodSpec-ში აღწერილი კონტეინერები გაშვებული და ჯანსაღია?",o:["kubelet","kube-scheduler","kube-proxy","etcd"],a:0,w:"kubelet; Kubernetes-ის გარეშე შექმნილ კონტეინერებს ის არ მართავს."},
+ {s:0,q:"რას აკეთებს kube-proxy?",o:["Pod-ებს node-ებზე გეგმავს","container image-ებს იწერს","node-ზე ქსელურ წესებს ინახავს, რაც Service-ის ტრაფიკს Pod-ებამდე მიიყვანს","etcd-ის backup-ს აკეთებს"],a:2,w:"kube-proxy ახორციელებს Service-ის კონცეფციის ნაწილს."},
+ {s:0,q:"kube-controller-manager-ის რომელი კონტროლერი რეაგირებს node-ის გათიშვაზე?",o:["Job controller","Endpoints controller","Service Account & Token controller","Node controller"],a:3,w:"Node controller ამჩნევს node-ის გათიშვას და რეაგირებს."},
+ {s:0,q:"სად ეძებს kubectl კონფიგურაციას ნაგულისხმევად?",o:["`$HOME/.kube/config`","`/etc/hosts`","`/var/lib/rancher/rke2/bin`","`/etc/rancher/rke2/config.yaml`"],a:0,w:"შეცვლა შეიძლება `KUBECONFIG`-ით ან `--kubeconfig`-ით."},
+ {s:0,q:"როგორ სკალირდება kube-apiserver?",o:["მხოლოდ ვერტიკალურად (მეტი CPU)","არ სკალირდება","ჰორიზონტალურად — მეტი ინსტანსით და მათ შორის ტრაფიკის განაწილებით","მხოლოდ etcd-ის გაზრდით"],a:2,w:"რამდენიმე ინსტანსი + მათ შორის load balancing."},
+ {s:0,q:"რომელი ბრძანებით ნახავ Pod-ის კონტეინერის ლოგებს?",o:["`kubectl describe`","`kubectl logs`","`kubectl exec`","`kubectl get`"],a:1,w:"`logs` აჩვენებს stdout/stderr-ს; `describe` — დეტალებს და Events-ს."},
+ {s:0,q:"რა არის NodePort-ის ნაგულისხმევი დიაპაზონი?",o:["1–1024","6443–9345","8000–9000","30000–32767"],a:3,w:"30000–32767, მაგალითად 30082."},
+ {s:0,q:"რომელი ობიექტი მართავს გარე HTTP/HTTPS წვდომას host-ისა და path-ის წესებით?",o:["Ingress","NodePort Service","ConfigMap","StatefulSet"],a:0,w:"Ingress: host/path → Service:port."},
+ {s:0,q:"რა სჭირდება Ingress-ს, რომ რეალურად იმუშაოს?",o:["Headless Service","PersistentVolumeClaim","Ingress Controller","Startup probe"],a:2,w:"Ingress Controller ასრულებს Ingress-ის წესებს."},
+ {s:0,q:"რომელი probe-ის ჩავარდნა იწვევს გაშვებული კონტეინერის რესტარტს?",o:["Readiness probe","Service selector","NodePort","Liveness probe"],a:3,w:"liveness ჩავარდნისას kubelet კონტეინერს რესტარტავს და RESTARTS იზრდება."},
+ {s:0,q:"რა ხდება, როცა readiness probe ჩავარდება?",o:["კონტეინერი რესტარტდება","Node იშლება კლასტერიდან","Pod გამოდის Service-ის endpoints-იდან და ტრაფიკს აღარ იღებს","Secret იშლება"],a:2,w:"readiness რესტარტს არ იწვევს, მხოლოდ ტრაფიკს ჭრის."},
+ {s:0,q:"როგორ ინახება Secret-ის მნიშვნელობები ნაგულისხმევად?",o:["base64-ით კოდირებული, არა დაშიფრული","AES-ით დაშიფრული","ჰეშირებული, აღდგენა შეუძლებელია","ღია ტექსტით Deployment-ის YAML-ში"],a:0,w:"base64 დაშიფვრა არ არის; საჭიროა encryption at rest და RBAC."},
+ {s:0,q:"StatefulSet-ის Pod-ს თუ წაშლი, ახალ Pod-ს ექნება:",o:["შემთხვევითი სახელი და ახალი PVC","იგივე სახელი და იგივე PVC","ახალი სახელი, მაგრამ იგივე PVC","ახალი Pod არ შეიქმნება"],a:1,w:"სტაბილური იდენტობა: `app-0` უკან იმავე PVC-ს უერთდება."},
+ {s:0,q:"რით გამოირჩევა Headless Service?",o:["`type: NodePort`","`port: 0`","selector არ აქვს","`clusterIP: None`"],a:3,w:"DNS პირდაპირ Pod-ების IP-ებს აბრუნებს."},
+ {s:0,q:"რას ნიშნავს `volumeBindingMode: WaitForFirstConsumer`?",o:["PV იშლება პირველი Pod-ის შემდეგ","PVC ადმინის დასტურს ელოდება","PVC-ის PV-ზე მიბმა ჩერდება, სანამ მისი Pod არ დაიგეგმება","Pod ელოდება, სანამ PV ავტომატურად შეიქმნება"],a:2,w:"scheduler ითვალისწინებს local PV-ის node affinity-ს."},
+ {s:0,q:"რას ნიშნავს PV-ის reclaim policy `Retain`?",o:["PVC-ის წაშლის შემდეგ PV და მონაცემი რჩება","PV ავტომატურად იშლება","მონაცემი იშლება, PV რჩება","PV ავტომატურად სხვა PVC-ს მიებმება"],a:0,w:"PV გადადის Released-ში; ადმინი ხელით ასუფთავებს."},
+ {s:0,q:"რომელ პორტზე უერთდება RKE2 Agent RKE2 Server-ს რეგისტრაციისთვის?",o:["TCP 6443","TCP 9345","TCP 10250","UDP 8472"],a:1,w:"9345 — რეგისტრაცია; 6443 — Kubernetes API."},
+ {s:0,q:"რა სჭირდება Canal-ის VXLAN overlay-ს?",o:["TCP 9099","TCP 22","UDP 8472","TCP 2379"],a:2,w:"8472/UDP მხოლოდ node-ებს შორის, არასდროს საჯაროდ."},
+ {s:0,q:"სად ინახება RKE2-ის join token server-ზე?",o:["`/etc/rancher/rke2/config.yaml`","`~/.kube/config`","`/etc/modules-load.d/k8s.conf`","`/var/lib/rancher/rke2/server/node-token`"],a:3,w:"token მგრძნობიარეა — არ აქვეყნებ."},
+ {s:0,q:"რას აკეთებს Dockerfile-ში `EXPOSE 80`?",o:["მეტამონაცემია, ჰოსტის პორტს თავისით არ აქვეყნებს","ჰოსტზე 80 პორტს ხსნის","NodePort Service-ს ქმნის","კონტეინერის IP-ს ცვლის"],a:0,w:"EXPOSE მხოლოდ დოკუმენტაციაა."},
+ {s:0,q:"რომელ container runtime-ს იყენებს RKE2?",o:["Docker Engine","containerd","VirtualBox","Hyper-V"],a:1,w:"Docker საჭიროა მხოლოდ image-ის ასაწყობად."},
+ {s:0,q:"რომელია სწორი იერარქია?",o:["Deployment → ReplicaSet → Pods","Pod → ReplicaSet → Deployment","ReplicaSet → Deployment → Pods","Deployment → Pods, ReplicaSet-ის გარეშე"],a:0,w:"Deployment ქმნის ReplicaSet-ს, ის კი — Pod-ებს."},
+ {s:0,q:"რამდენი RKE2 Server node-ია ჩვეულებრივ HA კლასტერში?",o:["1","2","3","4"],a:2,w:"კენტი რაოდენობა etcd quorum-ისთვის; 3 node უძლებს ერთის დაკარგვას."},
+ {s:0,q:"რომელი ბრძანება ხსნის master-ის control-plane taint-ს?",o:["`kubectl untaint node <node>`","`kubectl delete taint <node>`","`kubectl label node <node> node-role.kubernetes.io/control-plane-`","`kubectl taint nodes <node> node-role.kubernetes.io/control-plane:NoSchedule-`"],a:3,w:"taint-ის ბოლოს დეფისი (`-`) მას ხსნის."}
+];
+const OPEN = [
+ {g:"A",s:1,q:"რა არის Kubernetes?",en:"What is Kubernetes?",a:"Kubernetes არის ღია კოდის პლატფორმა კონტეინერიზებული აპლიკაციების ავტომატური განლაგების, სკალირებისა და მართვისთვის. ის ორკესტრირებს გამოთვლით რესურსს, ქსელს და საცავს, ამიტომ აპლიკაცია სხვადასხვა ინფრასტრუქტურაზე პორტაბელურია. მომხმარებელი აღწერს სასურველ მდგომარეობას, Kubernetes კი რეალურს მას უახლოებს: Pod-ებს გეგმავს, დაცემულს თავიდან უშვებს და ტრაფიკს ანაწილებს."},
+ {g:"A",s:1,q:"რა არის kubectl და რისთვის გამოიყენება?",en:"What is kubectl, and what is it used for?",a:"kubectl არის Kubernetes-ის ბრძანების ხაზის ინსტრუმენტი, რომელიც control plane-ს Kubernetes API-ით (kube-apiserver-ით) ესაუბრება. მისით ქმნი, ნახულობ, ცვლი და შლი რესურსებს (`get`, `describe`, `apply`, `delete`, `scale`) და აკეთებ troubleshooting-ს (`logs`, `exec`). კონფიგურაციას ნაგულისხმევად `$HOME/.kube/config`-იდან კითხულობს; შეცვლა შეიძლება `KUBECONFIG`-ით ან `--kubeconfig`-ით."},
+ {g:"A",s:1,q:"რა არის Control Plane?",en:"What is the Kubernetes Control Plane?",a:"Control Plane კლასტერის „ტვინია“, რომელიც worker node-ებს და Pod-ებს მართავს. ის იღებს გლობალურ გადაწყვეტილებებს (მაგ. დაგეგმვა) და რეაგირებს მოვლენებზე: მაგალითად, ქმნის ახალ Pod-ს, როცა Deployment-ის replica-ები არ კმარა. კომპონენტები: kube-apiserver, etcd, kube-scheduler, kube-controller-manager. Production-ში ის რამდენიმე მანქანაზე ეშვება fault tolerance-ისა და HA-სთვის."},
+ {g:"A",s:1,q:"რა როლი აქვს kube-apiserver-ს?",en:"What is the role of the kube-apiserver?",a:"kube-apiserver ავლენს Kubernetes API-ს და control plane-ის front end-ია. ყველა მოთხოვნა — kubectl-იდან, kubelet-იდან, scheduler-იდან, controller-ებიდან — მასზე გადის. ის მოთხოვნებს ამოწმებს და ამუშავებს, კლასტერის მდგომარეობას კი etcd-ში წერს და იქიდან კითხულობს. ჰორიზონტალურად სკალირდება: რამდენიმე ინსტანსი, მათ შორის load balancing-ით."},
+ {g:"A",s:1,q:"რა არის etcd და რატომაა მნიშვნელოვანი?",en:"What is etcd, and why is it important?",a:"etcd არის თანმიმდევრული (consistent) და მაღალი ხელმისაწვდომობის key-value საცავი, სადაც Kubernetes-ის ყველა ობიექტი და კლასტერის მდგომარეობა ინახება. მისი დაკარგვა კლასტერის კონფიგურაციის დაკარგვას ნიშნავს, ამიტომ საჭიროა პერიოდული backup (ჩაშენებული snapshot ან volume snapshot). snapshot-ში მგრძნობიარე მონაცემია, ამიტომ ის უნდა დაიშიფროს."},
+ {g:"B",s:1,q:"რა განსხვავებაა Control Plane Node-სა და Worker Node-ს შორის?",en:"What is the difference between a Control Plane Node and a Worker Node?",a:"Control Plane node კლასტერს მართავს: მასზეა kube-apiserver, etcd, kube-scheduler და kube-controller-manager. Worker node აპლიკაციის Pod-ებს უშვებს: მასზეა kubelet, kube-proxy და container runtime (containerd). Control plane წყვეტს, რა და სად გაეშვას, worker კი ამას ასრულებს. Control plane-ს ხშირად NoSchedule taint ადევს, რომ ჩვეულებრივი აპლიკაციები იქ არ მოხვდეს."},
+ {g:"B",s:1,q:"რა განსხვავებაა Pod-სა და Container-ს შორის?",en:"What is the difference between a Pod and a Container?",a:"კონტეინერი image-იდან გაშვებული იზოლირებული პროცესია, რომელსაც container runtime უშვებს. Pod Kubernetes-ის უმცირესი ერთეულია, რომელიც ერთ ან მეტ მჭიდროდ დაკავშირებულ კონტეინერს აერთიანებს. Pod-ის კონტეინერები იზიარებენ ერთ IP-ს, port space-ს და volume-ებს და ყოველთვის ერთ node-ზე ეშვება. Kubernetes კონტეინერებს პირდაპირ არ მართავს — ის Pod-ებს მართავს."},
+ {g:"B",s:1,q:"რა არის Deployment და რატომ ვიყენებთ?",en:"What is a Kubernetes Deployment, and why do we use it?",a:"Deployment Pod-ებისა და ReplicaSet-ების დეკლარაციული მართვის ობიექტია. YAML-ში აღწერ სასურველ მდგომარეობას — image, replica-ების რაოდენობა, label-ები — და Deployment controller რეალურს მას უახლოებს. ვიყენებთ, რადგან ის ავტომატურად ინარჩუნებს Pod-ების რაოდენობას (self-healing) და იძლევა scaling-ს, rolling update-ს და rollback-ს."},
+ {g:"B",s:1,q:"რა არის ReplicaSet და როგორ უკავშირდება Deployment-ს?",en:"What is a ReplicaSet, and how does it relate to a Deployment?",a:"ReplicaSet უზრუნველყოფს, რომ ერთი Pod template-ის ზუსტად N ასლი იყოს გაშვებული: თუ აკლია, ქმნის; თუ მეტია, შლის. Deployment ReplicaSet-ს ავტომატურად ქმნის და მართავს: Deployment → ReplicaSet → Pods. template-ის ცვლილებისას (მაგ. ახალი image) Deployment ახალ ReplicaSet-ს ქმნის, მას ეტაპობრივად ზრდის, ძველს კი ამცირებს (rolling update). ძველი ReplicaSet rollback-ისთვის რჩება, ამიტომ ReplicaSet-ს პირდაპირ იშვიათად ვქმნით."},
+ {g:"B",s:1,q:"რა ხდება, როცა Deployment-ის მართულ Pod-ს წაშლი?",en:"What happens when a Pod managed by a Deployment is deleted?",a:"Pod იშლება, მაგრამ ReplicaSet controller ამჩნევს, რომ გაშვებული Pod-ები სასურველ რაოდენობაზე (replicas) ნაკლებია. ის მაშინვე ქმნის ახალ Pod-ს იმავე template-იდან — ახალი სახელით და ჩვეულებრივ ახალი IP-ით, scheduler კი მას node-ს უნიშნავს. ამას self-healing ჰქვია. Pod-ის სამუდამოდ მოსაშორებლად replica-ები უნდა შეამცირო ან Deployment წაშალო."},
+ {g:"C",s:1,q:"რა არის Service და რატომაა საჭირო?",en:"What is a Kubernetes Service, and why is it needed?",a:"Service არის აბსტრაქცია, რომელიც Pod-ების ჯგუფს ქსელურ სერვისად აქვეყნებს სტაბილური IP-ითა და DNS სახელით. ის საჭიროა, რადგან Pod-ები დროებითია და მათი IP-ები იცვლება, ამიტომ კლიენტი მათ პირდაპირ IP-ით ვერ მიმართავს. Service Pod-ებს label selector-ით პოულობს და ტრაფიკს მათ შორის ანაწილებს. ტიპები: ClusterIP, NodePort, LoadBalancer, ExternalName."},
+ {g:"C",s:1,q:"რა განსხვავებაა ClusterIP-სა და NodePort-ს შორის?",en:"What is the difference between ClusterIP and NodePort?",a:"ClusterIP ნაგულისხმევი ტიპია: Service იღებს ვირტუალურ IP-ს, რომელიც მხოლოდ კლასტერის შიგნიდანაა ხელმისაწვდომი, შიდა კომუნიკაციისთვის. NodePort ამას გარდა ყველა node-ზე ხსნის ერთსა და იმავე პორტს 30000–32767 დიაპაზონიდან. ამიტომ აპლიკაცია გარედან `<NodeIP>:<NodePort>`-ით ხელმისაწვდომი ხდება. ეს პორტი Security Group-ში მხოლოდ სანდო IP-ებისთვის უნდა გაიხსნას."},
+ {g:"C",s:1,q:"რა არის Labels და როგორ გამოიყენება?",en:"What are Kubernetes Labels, and how are they used?",a:"Label არის key/value წყვილი, რომელიც ობიექტს (Pod, Node, Service) ემაგრება, მაგ. `app=nginx`. Label-ები ობიექტების იდენტიფიკაციისა და დაჯგუფებისთვისაა, selector-ები კი მათი მიხედვით ირჩევენ ობიექტებს. მაგალითად, Deployment თავის Pod-ებს `matchLabels`-ით პოულობს, Service კი ტრაფიკს იმ Pod-ებზე აგზავნის, რომელთა label-ებიც selector-ს ემთხვევა. Node-ის `node-role.kubernetes.io/worker` label ROLES სვეტში `worker`-ს აჩვენებს."},
+ {g:"C",s:1,q:"რა არის Taint და როგორ მოქმედებს Pod-ების დაგეგმვაზე?",en:"What is a Kubernetes Taint, and how does it affect Pod scheduling?",a:"Taint არის node-ზე დადებული აღნიშვნა (key, value, effect), რომელიც Pod-ებს ამ node-იდან „აგერიებს“. Pod ასეთ node-ზე მხოლოდ შესაბამისი toleration-ით დაიგეგმება. `NoSchedule` ახალ Pod-ებს toleration-ის გარეშე არ გეგმავს, არსებულებს კი არ აგდებს; `NoExecute` მათაც აგდებს. მაგალითად, `node-role.kubernetes.io/control-plane:NoSchedule` master-ზე აპლიკაციებს worker-ებზე აგზავნის."},
+ {g:"C",s:1,q:"რა განსხვავებაა RKE2 Server-სა და RKE2 Agent-ს შორის?",en:"What is the difference between RKE2 Server and RKE2 Agent?",a:"RKE2 Server control-plane node-ია: უშვებს API server-ს, scheduler-ს, controller-ებს და ჩაშენებულ etcd-ს, ქმნის კლასტერს და join token-ს (`rke2-server` სერვისი). RKE2 Agent worker node-ია: უშვებს kubelet-ს, containerd-ს და აპლიკაციის Pod-ებს (`rke2-agent` სერვისი). Agent server-ს TCP 9345-ზე უერთდება token-ით, რომელიც მის `config.yaml`-შია. ორივე ერთი ვერსიით უნდა დაყენდეს."},
+ {g:"D",s:0,q:"რას აკეთებს kube-scheduler და რას ითვალისწინებს?",a:"kube-scheduler ადევნებს თვალს ახლად შექმნილ Pod-ებს, რომლებსაც node არ აქვს მინიჭებული, და თითოეულს შესაფერის node-ს ურჩევს. ითვალისწინებს რესურსის მოთხოვნებს, hardware/software/policy შეზღუდვებს, affinity/anti-affinity-ს, მონაცემის ლოკალურობას, workload-ებს შორის ურთიერთგავლენას და ვადებს. ასევე ითვალისწინებს taint-ებს და toleration-ებს."},
+ {g:"D",s:0,q:"რა არის kube-controller-manager?",a:"control-plane კომპონენტი, რომელიც controller პროცესებს უშვებს. თითო controller უწყვეტი control loop-ია: API server-ით აკვირდება კლასტერის მდგომარეობას და მიმდინარეს სასურველს უახლოებს. ლოგიკურად თითო controller ცალკე პროცესია, მაგრამ სიმარტივისთვის ყველა ერთ binary-შია. მაგალითები: Node, Job, Endpoints, ServiceAccount & Token, Replication controller."},
+ {g:"D",s:0,q:"რა განსხვავებაა kubelet-სა და kube-proxy-ს შორის?",a:"ორივე ყოველ node-ზე ეშვება. kubelet აგენტია: იღებს PodSpec-ებს და ზრუნავს, რომ აღწერილი კონტეინერები გაშვებული და ჯანსაღი იყოს; probe-ებსაც ის ასრულებს. kube-proxy ქსელური proxy-ა: node-ზე ინახავს ქსელურ წესებს (OS-ის packet filtering-ით), რომ Service-ზე მისული ტრაფიკი სწორ Pod-ებამდე მივიდეს."},
+ {g:"D",s:0,q:"რა არის Secret და რატომ არ ვწერთ პაროლს პირდაპირ Deployment-ში?",a:"Secret მგრძნობიარე მონაცემს (პაროლი, ტოკენი) Pod-ის განსაზღვრებისგან ცალკე ინახავს. Deployment-ში ჩაწერილი პაროლი ჩანს YAML-ში, git-ში და `describe`-ში; Secret-ზე წვდომა კი RBAC-ით კონტროლდება და მნიშვნელობა ცალკე იცვლება. კონტეინერს ის `env.valueFrom.secretKeyRef`-ით ან volume-ით გადაეცემა. Secret base64-ითაა კოდირებული და არა დაშიფრული, ამიტომ etcd-ის encryption at rest რეკომენდებულია."},
+ {g:"D",s:0,q:"ახსენი Startup, Readiness და Liveness probe-ები და მათი ჩავარდნის შედეგი.",a:"Startup probe ამოწმებს, ჩაირთო თუ არა აპლიკაცია; სანამ არ გაივლის, დანარჩენი ორი გამორთულია, ვადის ამოწურვისას კი კონტეინერი რესტარტდება. Readiness ამოწმებს, მზადაა თუ არა Pod ტრაფიკისთვის; ჩავარდნისას Pod Service-ის endpoints-იდან გამოდის, მაგრამ არ რესტარტდება. Liveness ამოწმებს, ცოცხალია თუ არა კონტეინერი; ჩავარდნისას kubelet მას რესტარტავს და RESTARTS იზრდება. სამივეს kubelet ასრულებს."},
+ {g:"D",s:0,q:"რა განსხვავებაა Ingress-სა და NodePort Service-ს შორის?",a:"NodePort ყველა node-ზე ხსნის პორტს და ერთი პორტი ერთ Service-ს ემსახურება. Ingress HTTP/HTTPS დონეზე მუშაობს: ერთი შესასვლელიდან host-ისა და path-ის წესებით ტრაფიკს სხვადასხვა Service-ზე ანაწილებს. Ingress-ს შეუძლია TLS termination და name-based virtual hosting, მაგრამ სჭირდება Ingress Controller. HTTP/HTTPS-ის გარდა სხვა პროტოკოლებისთვის NodePort ან LoadBalancer გამოიყენება."},
+ {g:"D",s:0,q:"როდის ვიყენებთ Deployment-ს და როდის StatefulSet-ს?",a:"Deployment stateless აპლიკაციებისთვისაა: Pod-ები ურთიერთჩანაცვლებადია, აქვთ შემთხვევითი სახელები და დამოუკიდებელი საცავი არ სჭირდებათ. StatefulSet stateful აპლიკაციებისთვისაა (ბაზები): Pod-ებს აქვთ სტაბილური რიგითი სახელი (`app-0`), სტაბილური ქსელური იდენტობა Headless Service-ით და საკუთარი PVC `volumeClaimTemplates`-იდან. Pod-ის თავიდან შექმნისას StatefulSet იმავე სახელს და იმავე PVC-ს აბრუნებს, ამიტომ მონაცემი რჩება."},
+ {g:"D",s:0,q:"რა განსხვავებაა PV-სა და PVC-ს შორის? რა როლი აქვს StorageClass-ს?",a:"PV კლასტერის დონის საცავის რესურსია (დისკი ან დირექტორია), რომელსაც ადმინი ქმნის ან StorageClass ავტომატურად აჩენს. PVC namespace-ის დონის მოთხოვნაა საცავზე — ზომა და access mode; Kubernetes მას შესაფერის PV-ს მიაბამს (Bound). StorageClass აღწერს საცავის კლასს: provisioner-ს, reclaim policy-ს და binding mode-ს. `kubernetes.io/no-provisioner`-ის დროს PV ხელით უნდა შეიქმნას."},
+ {g:"D",s:0,q:"რატომ სჭირდება local PV-ს nodeAffinity და WaitForFirstConsumer?",a:"Local PV ფიზიკურად ერთ node-ზეა (მაგ. `/var/lib/quiz2-data` quiz2-worker-1-ზე), ამიტომ nodeAffinity scheduler-ს ეუბნება, რომ მისი Pod მხოლოდ ამ node-ზე დაიგეგმოს. WaitForFirstConsumer PVC-ის მიბმას Pod-ის დაგეგმვამდე აყოვნებს, რომ scheduler-მა საცავის მდებარეობა და Pod-ის სხვა მოთხოვნები ერთად გაითვალისწინოს. სხვა შემთხვევაში PVC შეიძლება მიებას PV-ს, რომლის node-ზეც Pod ვერ დაიგეგმება."},
+ {g:"D",s:0,q:"რა არის Headless Service და რატომ სჭირდება StatefulSet-ს?",a:"Headless Service-ს `clusterIP: None` აქვს: ვირტუალური IP და load balancing არ აქვს, DNS კი პირდაპირ Pod-ების IP-ებს აბრუნებს. StatefulSet-ს ის სტაბილური ქსელური იდენტობისთვის სჭირდება: თითო Pod მუდმივ DNS სახელს იღებს, მაგ. `quiz2-stateful-app-0.quiz2-stateful-headless.quiz2.svc.cluster.local`. StatefulSet მას `serviceName` ველით უთითებს."},
+ {g:"D",s:0,q:"რატომ ვამზადებთ Linux-ს RKE2-მდე (swap, br_netfilter, ip_forward)?",a:"Swap-ის გამორთვა მეხსიერების ქცევას პროგნოზირებადს ხდის. `overlay` მოდული კონტეინერის ფენოვან ფაილურ სისტემას უზრუნველყოფს, `br_netfilter` კი bridge-ის ტრაფიკს iptables-ისთვის ხილულს ხდის. `net.ipv4.ip_forward = 1` node-ს ტრაფიკის გადამისამართების უფლებას აძლევს, რაც Pod-ებს შორის კომუნიკაციისთვის აუცილებელია. პარამეტრები ფაილებში იწერება, რომ რებუტის შემდეგაც დარჩეს."},
+ {g:"D",s:0,q:"რომელი პორტებია საჭირო RKE2 კლასტერისთვის და რატომ არ ვხსნით მათ 0.0.0.0/0-ზე?",a:"9345/TCP — agent-ის რეგისტრაცია, 6443/TCP — Kubernetes API, 10250/TCP — kubelet, 8472/UDP — Canal VXLAN, 9099/TCP — Canal health, 2379–2381/TCP — etcd. ეს შიდა კლასტერული ტრაფიკია, ამიტომ წყაროდ იგივე Security Group უნდა მიეთითოს. საჯაროდ გახსნა API-ს, kubelet-ს და overlay ქსელს თავდასხმისთვის ამჟღავნებს. SSH (22) მხოლოდ ადმინის IP/32-დან, NodePort კი მხოლოდ სანდო კლიენტებისთვის."},
+ {g:"D",s:0,q:"რატომ აფიქსირებენ (pin) RKE2-ის ვერსიას?",a:"`INSTALL_RKE2_VERSION`-ით კონკრეტული ვერსიის მითითება ინსტალაციას განმეორებადს ხდის: ყველა node ერთსა და იმავე, ტესტირებულ ვერსიაზეა. გზამკვლევის მიხედვით, ამან stable არხის HTTP 404 შეცდომაც აიცილა. Server-ისა და agent-ების ვერსიები უნდა ემთხვეოდეს, production-ში კი განახლება დაგეგმილ ფანჯარაში ხდება."},
+ {g:"D",s:0,q:"რატომაა ერთი master-ის კლასტერი არასაკმარისი production-ისთვის?",a:"ერთი master single point of failure-ია: მისი დაკარგვისას API, scheduler, controller-ები და etcd მიუწვდომელია. HA-სთვის ჩვეულებრივ 3 RKE2 Server-ს იყენებენ etcd quorum-ით და სტაბილური API/რეგისტრაციის endpoint-ით. ამას გარდა საჭიროა etcd snapshot-ების და token-ის უსაფრთხო backup და აღდგენის ტესტი."},
+ {g:"D",s:0,q:"რა განსხვავებაა `kubectl port-forward`-სა და NodePort-ს შორის აპლიკაციის შემოწმებისას?",a:"port-forward kubectl-ით ლოკალურ პორტს (მაგ. 8080) Service-ზე ან Pod-ზე დროებით გადაამისამართებს და ნაგულისხმევად მხოლოდ 127.0.0.1-ზე ისმენს. ამიტომ შემოწმება საჯარო პორტის გახსნის გარეშეა შესაძლებელი და Ctrl+C-ით ჩერდება. NodePort მუდმივი Service-ია, რომელიც ყველა node-ზე პორტს ხსნის და გარე წვდომისთვის Security Group-ის წესი სჭირდება."}
+];
+
+(function(){
+  const KEY = 'k8s-midterm-ge-v1';
+  const st = {m:{}, o:{}};
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const p = JSON.parse(raw); if (p && typeof p === 'object') { st.m = p.m || {}; st.o = p.o || {}; } }
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} };
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmt = s => esc(s).replace(/`([^`]+)`/g,'<code>$1</code>');
+  const num = n => String(Math.round(n * 100) / 100);
+  const L = ['A','B','C','D'];
+  const STAR = '<span class="star">★ ქვიზი</span> ';
+
+  /* ---------- closed questions ---------- */
+  const mcqEl = document.getElementById('mcq');
+  let keyOn = false, mcqStar = false;
+  MCQ.forEach((it, i) => {
+    const li = document.createElement('li');
+    li.className = 'q';
+    li.innerHTML =
+      '<div class="q-head"><span class="q-num">' + (i + 1) + '</span><div class="q-text">' + (it.s ? STAR : '') + fmt(it.q) + '</div></div>' +
+      '<div class="opts" role="group" aria-label="კითხვა ' + (i + 1) + '">' +
+      it.o.map((o, j) => '<button type="button" class="opt" data-j="' + j + '"><span class="l">' + L[j] + '</span><span>' + fmt(o) + '</span><span class="mark" aria-hidden="true"></span></button>').join('') +
+      '</div><div class="why" hidden></div>';
+    li.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => {
+      if (st.m[i] !== undefined) return;
+      st.m[i] = Number(b.dataset.j);
+      save(); paintQ(i); updateScores();
+    }));
+    mcqEl.appendChild(li);
+  });
+
+  function paintQ(i) {
+    const li = mcqEl.children[i], it = MCQ[i], ch = st.m[i];
+    const answered = ch !== undefined, show = keyOn || answered;
+    li.hidden = mcqStar && !it.s;
+    li.querySelectorAll('.opt').forEach(b => {
+      const j = Number(b.dataset.j), mk = b.querySelector('.mark');
+      b.classList.remove('correct','wrong'); mk.textContent = '';
+      b.disabled = answered;
+      if (show && j === it.a) { b.classList.add('correct'); mk.textContent = '✓'; }
+      if (answered && j === ch && ch !== it.a) { b.classList.add('wrong'); mk.textContent = '✗'; }
+    });
+    const why = li.querySelector('.why');
+    if (show) {
+      let lead;
+      if (!answered) lead = '<b>სწორი პასუხი: ' + L[it.a] + '.</b> ';
+      else if (ch === it.a) lead = '<b>სწორია.</b> ';
+      else lead = '<b>არასწორია, სწორი პასუხია ' + L[it.a] + '.</b> ';
+      why.innerHTML = lead + fmt(it.w);
+      why.classList.toggle('miss', answered && ch !== it.a);
+      why.hidden = false;
+    } else { why.hidden = true; why.innerHTML = ''; why.classList.remove('miss'); }
+  }
+  const paintAllQ = () => MCQ.forEach((_, i) => paintQ(i));
+
+  /* ---------- open questions ---------- */
+  const oqEl = document.getElementById('oq');
+  const GN = {A:'A. საფუძვლები', B:'B. არქიტექტურა', C:'C. ქსელი და RKE2', D:'D. დამატებითი კითხვები'};
+  const heads = {};
+  let openStar = false, allOpen = false;
+  const opened = {};
+  let lastG = '';
+  OPEN.forEach((it, i) => {
+    if (it.g !== lastG) {
+      const h = document.createElement('h3');
+      h.className = 'group-h'; h.textContent = GN[it.g];
+      oqEl.appendChild(h); heads[it.g] = h; lastG = it.g;
+    }
+    const art = document.createElement('article');
+    art.className = 'oq';
+    art.innerHTML =
+      '<div class="q-head"><span class="q-num">' + (i + 1) + '</span><div class="q-text">' + (it.s ? STAR : '') + fmt(it.q) + '</div></div>' +
+      (it.en ? '<p class="en" lang="en">' + esc(it.en) + '</p>' : '') +
+      '<div class="oq-tools"><button type="button" class="btn reveal" aria-expanded="false" aria-controls="ans' + i + '">ნიმუშის ნახვა</button></div>' +
+      '<div class="answer" id="ans' + i + '" hidden><p>' + fmt(it.a) + '</p></div>' +
+      '<div class="grade" role="group" aria-label="თვითშეფასება, კითხვა ' + (i + 1) + '" hidden><span>შენი პასუხი იყო:</span>' +
+      '<button type="button" class="btn" data-g="2" aria-pressed="false">სრული, 0.5</button>' +
+      '<button type="button" class="btn" data-g="1" aria-pressed="false">ნაწილობრივი, 0.25</button>' +
+      '<button type="button" class="btn" data-g="0" aria-pressed="false">ვერ ვუპასუხე, 0</button></div>';
+    art.querySelector('.reveal').addEventListener('click', () => { opened[i] = !isOpen(i); paintO(i); });
+    art.querySelectorAll('.grade .btn').forEach(b => b.addEventListener('click', () => {
+      const g = Number(b.dataset.g);
+      if (st.o[i] === g) delete st.o[i]; else st.o[i] = g;
+      save(); paintO(i); updateScores();
+    }));
+    oqEl.appendChild(art);
+    it.el = art;
+  });
+  const isOpen = i => opened[i] !== undefined ? opened[i] : allOpen;
+
+  function paintO(i) {
+    const it = OPEN[i], art = it.el, open = isOpen(i);
+    art.hidden = openStar && !it.s;
+    const btn = art.querySelector('.reveal');
+    btn.setAttribute('aria-expanded', String(open));
+    btn.textContent = open ? 'ნიმუშის დამალვა' : 'ნიმუშის ნახვა';
+    art.querySelector('.answer').hidden = !open;
+    art.querySelector('.grade').hidden = !open && st.o[i] === undefined;
+    art.querySelectorAll('.grade .btn').forEach(b => b.setAttribute('aria-pressed', String(st.o[i] === Number(b.dataset.g))));
+  }
+  function paintAllO() {
+    OPEN.forEach((_, i) => paintO(i));
+    Object.keys(heads).forEach(g => { heads[g].hidden = openStar && !OPEN.some(it => it.g === g && it.s); });
+  }
+
+  /* ---------- scores ---------- */
+  function updateScores() {
+    let ok = 0, ans = 0, okAll = 0;
+    MCQ.forEach((it, i) => {
+      if (st.m[i] === undefined) return;
+      if (st.m[i] === it.a) okAll++;
+      if (mcqStar && !it.s) return;
+      ans++; if (st.m[i] === it.a) ok++;
+    });
+    document.getElementById('mcq-score').textContent = ok;
+    document.getElementById('mcq-answered').textContent = ans;
+    document.getElementById('p-mcq').textContent = okAll + ' / ' + MCQ.length;
+    document.getElementById('m-mcq').style.width = (okAll / MCQ.length * 100) + '%';
+
+    let pts = 0, max = 0, ptsAll = 0;
+    OPEN.forEach((it, i) => {
+      const p = st.o[i] !== undefined ? st.o[i] * 0.25 : 0;
+      ptsAll += p;
+      if (openStar && !it.s) return;
+      max += 0.5; pts += p;
+    });
+    document.getElementById('open-score').textContent = num(pts);
+    document.getElementById('open-max').textContent = num(max);
+    document.getElementById('p-open').textContent = num(ptsAll) + ' / ' + num(OPEN.length * 0.5);
+    document.getElementById('m-open').style.width = (ptsAll / (OPEN.length * 0.5) * 100) + '%';
+  }
+
+  /* ---------- toolbars ---------- */
+  const toggle = (id, fn) => {
+    const b = document.getElementById(id);
+    b.addEventListener('click', () => { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); fn(on); });
+  };
+  toggle('mcq-star', on => { mcqStar = on; paintAllQ(); updateScores(); });
+  toggle('mcq-key', on => { keyOn = on; paintAllQ(); });
+  document.getElementById('mcq-reset').addEventListener('click', () => { st.m = {}; save(); paintAllQ(); updateScores(); });
+  toggle('open-star', on => { openStar = on; paintAllO(); updateScores(); });
+  toggle('open-all', on => { allOpen = on; Object.keys(opened).forEach(k => delete opened[k]); paintAllO(); });
+  document.getElementById('open-reset').addEventListener('click', () => { st.o = {}; save(); paintAllO(); updateScores(); });
+
+  paintAllQ(); paintAllO(); updateScores();
+
+  /* ---------- table of contents highlight ---------- */
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const byId = {}; links.forEach(a => { byId[a.getAttribute('href').slice(1)] = a; });
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        links.forEach(a => a.classList.remove('on'));
+        const a = byId[e.target.id];
+        if (a) { a.classList.add('on'); const nav = document.querySelector('.toc'); if (window.innerWidth < 1000 && nav) nav.scrollLeft = a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2; }
+      });
+    }, {rootMargin:'-30% 0px -60% 0px'});
+    document.querySelectorAll('main section[id]').forEach(s => io.observe(s));
+  }
+})();
+</script>
+</body>
+</html>
